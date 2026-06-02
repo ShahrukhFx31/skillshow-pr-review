@@ -36,19 +36,18 @@ pr-review/
 
 ## Active tickets
 
+Folders under `pr-review/{TICKET}/` (not yet in `Completed/`).
+
 | Ticket   | Reports |
 |----------|---------|
-| SKSH-137 | `frontend.md`, `backend.md` |
 | SKSH-196 | `frontend.md`, `backend.md` |
-| SKSH-261 | `backend.md` |
 | SKSH-265 | `frontend.md`, `backend.md` |
 | SKSH-271 | `frontend.md`, `backend.md` |
 | SKSH-273 | `frontend.md`, `backend.md` |
 | SKSH-274 | `frontend.md` |
 | SKSH-278 | `frontend.md`, `backend.md` |
 | SKSH-294 | `frontend.md`, `backend.md` |
-| SKSH-295 | `frontend.md`, `backend.md` |
-| SKSH-303 | `frontend.md` |
+| SKSH-303 | `frontend.md`, `backend.md` |
 | SKSH-315 | `frontend.md` |
 
 ## Completed tickets
@@ -59,12 +58,18 @@ Archived under `pr-review/Completed/` when all findings are **Fixed** or **Accep
 |----------|---------|
 | SKSH-101 | `frontend.md`, `backend.md` |
 | SKSH-116 | `frontend.md`, `backend.md` |
+| SKSH-137 | `frontend.md`, `backend.md` |
 | SKSH-178 | `frontend.md`, `backend.md` |
+| SKSH-181 | `frontend.md`, `backend.md` |
 | SKSH-189 | `frontend.md`, `backend.md` |
 | SKSH-243 | `frontend.md` |
 | SKSH-258 | `frontend.md` |
+| SKSH-261 | `backend.md` |
 | SKSH-267 | `frontend.md`, `backend.md`, `orchestrator.md` |
 | SKSH-268 | `frontend.md` |
 | SKSH-277 | `frontend.md`, `backend.md` |
+| SKSH-279 | `frontend.md` |
+| SKSH-295 | `frontend.md`, `backend.md` |
 | SKSH-302 | `frontend.md` |
+| SKSH-305 | `frontend.md`, `backend.md` |
 | SKSH-312 | `frontend.md`, `backend.md` |
