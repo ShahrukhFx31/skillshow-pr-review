@@ -2,7 +2,7 @@
 
 **Repo:** skillshow (main API)  
 **Branch:** `SKSH-261`  
-**Base:** `main...HEAD` (`d265eb6` — refactor: update username validation and suggestions)  
+**Base:** `main...HEAD` (`5916d66`, `d265eb6`)  
 **Scope:** Layer separation, MongoDB/query performance, validation/security, types/constants, error handling (Critical & High only)  
 **Findings:** 1 (0 Critical, 1 High)
 
@@ -39,14 +39,20 @@ Alternatively, validate format only in the service when `nextUsername !== user.u
 
 **PR comment (line 9):** **High:** Tightening `USERNAME_REGEX` applies to all Joi username paths, not just suggestions. Legacy usernames with `.` `_` `-` will fail profile update/check-username even when unchanged. Please confirm prod data or add a grandfather/migration path.
 
+**Re-review (Jun 2, 2026):** **Accepted** by team decision. Latest branch (`5916d66`) only merges `main`; no code change to `src/constants/username.constants.ts` regex behavior or Joi wiring (`auth.validation.ts`, `username.validation.ts`, `profile-account-general.validation.ts`). Risk is acknowledged as out of scope for this PR.
+
 ---
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Tightened regex blocks legacy usernames on update/check | HIGH | Open | `src/constants/username.constants.ts` | 8-9 |
+| 1 | Tightened regex blocks legacy usernames on update/check | HIGH | Accepted | `src/constants/username.constants.ts` | 8-9 |
 
 **Positive notes:** Change stays DRY — one constant drives Joi and suggestion filtering. `UsernameService.buildUsernameCandidates` aligns with `athlete.service.ts` alphanumeric sanitization. Suggestion batch availability still uses `userRepository.findTakenActiveUsernames` (`$in`, `.lean()`). Tests updated for new format and add regression coverage that suggestions match `USERNAME_REGEX`. Layering unchanged (validation → controller → service → repository).
 
 **Not reported:** Redundant `USERNAME_HAS_ALNUM_REGEX` after the stricter primary pattern (cosmetic). `ONLY_SPECIAL_CHARACTERS` message rarely reached (test correctly expects `INVALID_FORMAT` for `.___---`). No controller/repository/query changes in diff.
+
+**New Critical/High issues in re-check:** None beyond the existing open item.
+
+**Merge readiness:** Ready — remaining High finding is Accepted (deferred by team decision).
