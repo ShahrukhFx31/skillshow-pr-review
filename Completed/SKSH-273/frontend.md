@@ -4,7 +4,7 @@
 **Branch:** `SKSH-273`  
 **Base:** `main...HEAD`  
 **Scope:** React performance, hooks, JSX/props, Tailwind/file structure (Critical, High, Medium only)  
-**Findings:** 3 (0 Critical, 2 High, 1 Medium) — **re-verified: 2 ✅ Fixed, 1 Partially fixed**
+**Findings:** 3 (0 Critical, 2 High, 1 Medium) — **all resolved**
 
 ---
 
@@ -13,18 +13,17 @@ Dead fallback calls non-existent profile API
 
 Risk Level: HIGH
 File Path: src/pages/share/video/index.tsx
-Lines: 27-35 (original)
 
 Description:
-After `getPublicVideoShare`, when `share.profile` was null the query called `GET /public/videos/:id/profile`, which was not implemented on the backend.
+Query previously called `GET /public/videos/:id/profile` when embedded profile was null; route did not exist.
 
 Impact:
-- Extra 404 on every share load without embedded profile
+- Extra 404 on share page loads
 
 Recommendation:
-Remove fallback; rely on embedded `profile` from main endpoint.
+Remove fallback; use embedded profile from main endpoint.
 
-**Re-verification (commits `4ffd3a00` / `721b0842`):** ✅ Fixed — `queryFn` is `() => getPublicVideoShare(videoId)` only; `getPublicVideoOwnerProfile` removed from `publicVideoService.ts`.
+**Re-verification:** ✅ Fixed — `queryFn: () => getPublicVideoShare(videoId)` only; `getPublicVideoOwnerProfile` removed.
 
 ---
 
@@ -44,7 +43,7 @@ Impact:
 Recommendation:
 Align backend; hydrate upload state from API after create.
 
-**Re-verification:** ✅ Fixed — backend now requires explicit `isPublic === true`; `useVideoUpload` hydrates `isPublic` and `shareUrl` from `createdVideo` response.
+**Re-verification:** ✅ Fixed — backend requires explicit `true`; `useVideoUpload` hydrates `isPublic` and `shareUrl` from create response.
 
 ---
 
@@ -62,9 +61,9 @@ Impact:
 - Style/convention inconsistency
 
 Recommendation:
-Use `subtitle && <p>…</p>` and `showProfile && profile && <div>…</div>`.
+Use `&&` for optional fragments.
 
-**Re-verification:** Partially fixed — subtitle uses `&&` (line 47); profile sidebar still uses `showProfile && profile ? (…) : null` (lines 51-55). Optional one-line cleanup remains.
+**Re-verification:** ✅ Fixed — `subtitle && <p>…</p>` and `showProfile && profile && (<div>…</div>)` (no null fallback).
 
 ---
 
@@ -74,8 +73,8 @@ Use `subtitle && <p>…</p>` and `showProfile && profile && <div>…</div>`.
 |---|--------|------|--------|------|-------|
 | 1 | Dead fallback calls non-existent `/profile` API | HIGH | ✅ Fixed | `src/pages/share/video/index.tsx` | — |
 | 2 | Upload public switch vs backend `isPublic` semantics | HIGH | ✅ Fixed | `src/pages/videos/utils/video-public.utils.ts` | 1-4 |
-| 3 | Ternary-with-null for optional JSX | MEDIUM | Partially fixed | `src/pages/share/video/components/PublicShareMediaLayout.tsx` | 51-55 |
+| 3 | Ternary-with-null for optional JSX | MEDIUM | ✅ Fixed | `src/pages/share/video/components/PublicShareMediaLayout.tsx` | 47, 51-55 |
 
 **Positive notes:** Public route at `/share/video/:id`; `apiClient` 401 handling for public URLs; role-scoped share profile display; feature colocated under `src/pages/share/video/`.
 
-**Merge readiness:** No open Critical/High blockers. One optional Medium style cleanup (profile block ternary) — acceptable to merge or fix in follow-up.
+**Merge readiness:** No open Critical/High/Medium blockers.
