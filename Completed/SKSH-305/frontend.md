@@ -4,7 +4,7 @@
 **Branch:** `SKSH-305`  
 **Base:** `main...HEAD`  
 **Scope:** React performance, hooks, JSX/props, Tailwind/file structure (Critical, High, Medium only)  
-**Findings:** 1 (0 Critical, 0 High, 1 Medium) — **re-verified: ✅ Fixed**
+**Findings:** 1 (0 Critical, 0 High, 1 Medium) — **re-verified (task complete): ✅ Fixed**
 
 ---
 
@@ -29,7 +29,7 @@ Drive the list/create decision from a global signal (for example stats API total
 **PR comment (line 276):**  
 `hasActiveRequests` is computed from the current paginated page, but it now controls whether we render list mode at all. That means landing on a page with only cancelled/rejected rows can route the user into create flow even if active requests exist on other pages. Could we base this switch on a global backend signal (stats/flag) rather than page-local rows?
 
-**Re-verification:** ✅ Fixed — list/create routing now uses `hasAnyRequests = (listData?.pagination?.total ?? 0) > 0` (line 142), so list mode stays visible for any account with requests regardless of current page contents. Search path always renders list mode with current `uiRequests` (lines 287-292). Create flow only when `!hasAnyRequests && !searchName.trim()` (line 300). `hasActiveEditRequests` remains in eligibility utils for detail/shell logic only, not list routing.
+**Re-verification (task complete):** ✅ Fixed — `hasAnyRequests` uses `listData.pagination.total` (line 142). List mode for any account with requests (line 276); search always uses list mode (lines 287-292). Detail page offers “Start new edit request” via `shouldOfferNewEditRequest`; source edits gated by `requestNeedsSourceFileAction` (change-request statuses only). `cancelled` mapped in API service, labels, and detail status. `Promise.allSettled` on deleted source videos avoids detail-page hard failure.
 ---
 
 ## Summary
@@ -37,5 +37,7 @@ Drive the list/create decision from a global signal (for example stats API total
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 | 1 | List/create routing now depends only on current page activity | MEDIUM | ✅ Fixed | `src/pages/editRequest/index.tsx` | 142, 275-300 |
+
+**Positive notes:** Eligibility helpers colocated under `utils/edit-request-list-eligibility.utils.ts`. Admin EDR search URL sync fix avoids clobbering in-progress typing. `ResponsiveModal` footer fix is scoped and correct.
 
 **Merge readiness:** No open Critical/High/Medium blockers.

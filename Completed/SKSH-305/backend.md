@@ -4,7 +4,7 @@
 **Branch:** `SKSH-305`  
 **Base:** `main...HEAD`  
 **Scope:** Layer separation, MongoDB/query performance, validation/security, types/constants, error handling (Critical and High only)  
-**Findings:** 1 (0 Critical, 1 High) — **re-verified: ✅ Fixed**
+**Findings:** 1 (0 Critical, 1 High) — **re-verified (task complete): ✅ Fixed**
 
 ---
 
@@ -29,7 +29,7 @@ After detaching a source video, if `requestedVideo.videos` becomes empty, set th
 **PR comment (line 130):**  
 When we detach a deleted library video from edit requests, we only mutate the source array and save. If this was the last source slot, the request can remain in an active status with no resolvable media, which creates inconsistent lifecycle behavior versus the `remove_source_video` path (that now cancels). Can we align this path to transition to `cancelled` (and record history) when no source videos remain?
 
-**Re-verification:** ✅ Fixed — after `detachSourceVideoReference`, when `remaining === 0` and status is not already terminal (`completed`, `rejected`, `cancelled`), the service sets `CANCELLED`, clears `adminAcceptedAt`, and pushes `EDIT_REQUEST_HISTORY_TYPE.CANCELLED` before save/realtime emit (lines 123-136). Aligns with `applyRemoveSourceVideo` cancel-on-empty behavior in `edit-request-source-review.utils.ts`.
+**Re-verification (task complete):** ✅ Fixed — `detachVideoFromUserEditRequests` cancels with history when `remaining === 0` (lines 123-136). Wired from `EditRequestController.deleteUploadedVideo` and `VideoController.delete` (lazy import). `cancelled` added to constants, types, status resolution, and `ACTION_GUARD.reject`. `applyRemoveSourceVideo` cancels on last source removal; history type switches to `CANCELLED` when removal cancels (lines 1437-1442).
 ---
 
 ## Summary
@@ -37,5 +37,7 @@ When we detach a deleted library video from edit requests, we only mutate the so
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 | 1 | Deleting a library video leaves orphaned active edit requests | HIGH | ✅ Fixed | `src/services/edit-request.service.ts` | 123-136 |
+
+**Positive notes:** Clean layering (controller → service → repository + utils). `detachSourceVideoReference` keeps library-delete detach separate from athlete `remove_source_video` workflow. Joi list filters pick up `cancelled` via `EDIT_REQUEST_STATUS_VALUES`.
 
 **Merge readiness:** No open backend Critical/High blockers.
