@@ -4,7 +4,7 @@
 **Branch:** `SKSH-273`  
 **Base:** `main...HEAD`  
 **Scope:** React performance, hooks, JSX/props, Tailwind/file structure (Critical, High, Medium only)  
-**Findings:** 3 (0 Critical, 2 High, 1 Medium)
+**Findings:** 3 (0 Critical, 2 High, 1 Medium) — **re-verified: 2 ✅ Fixed, 1 Partially fixed**
 
 ---
 
@@ -13,20 +13,18 @@ Dead fallback calls non-existent profile API
 
 Risk Level: HIGH
 File Path: src/pages/share/video/index.tsx
-Lines: 27-35
+Lines: 27-35 (original)
 
 Description:
-After `getPublicVideoShare`, when `share.profile` is null the query calls `getPublicVideoOwnerProfile(videoId)`, which requests `GET /public/videos/:id/profile`. The backend PR only implements `GET /public/videos/:id`—there is no `/profile` route. Every share page load with a missing embedded profile therefore issues an extra failing request (404) before settling.
+After `getPublicVideoShare`, when `share.profile` was null the query called `GET /public/videos/:id/profile`, which was not implemented on the backend.
 
 Impact:
-- Wasted network round-trip and error noise on every view where profile is omitted
-- Harder to debug real API failures; obscures missing backend profile data
+- Extra 404 on every share load without embedded profile
 
 Recommendation:
-Remove the fallback until a backend route exists, or drop `getPublicVideoOwnerProfile` from `publicVideoService.ts` entirely. The main payload already includes `profile` from `VideoPublicService.getPublicShareView`.
+Remove fallback; rely on embedded `profile` from main endpoint.
 
-**PR comment (line 30):**  
-**High:** This fallback hits `/public/videos/:id/profile`, which is not implemented on the API—please remove it or add the matching backend route so we do not 404 on every share load without an embedded profile.
+**Re-verification (commits `4ffd3a00` / `721b0842`):** ✅ Fixed — `queryFn` is `() => getPublicVideoShare(videoId)` only; `getPublicVideoOwnerProfile` removed from `publicVideoService.ts`.
 
 ---
 
@@ -38,17 +36,15 @@ File Path: src/pages/videos/utils/video-public.utils.ts
 Lines: 1-4
 
 Description:
-`isVideoPublic` returns true only when `isPublic === true`. The upload `Switch` uses this helper and hides `shareUrl` when false. The backend still treats `isPublic !== false` as shareable and defaults new videos to `isPublic: true`. The PR also changed `VideoItem` from `checked={videoLevelData.isPublic ?? true}` to strict `isVideoPublic(...)`, so the switch defaults off while many rows remain publicly shareable server-side until an explicit `PATCH` sets `isPublic: false`.
+UI used `isPublic === true` while backend treated `undefined` as public.
 
 Impact:
-- Users see “private” in the upload UI but may still have a working public link (from list `shareUrl` or guessed URL)
-- Mismatch between copy-link visibility and actual access
+- Mismatch between switch/copy-link and actual share access
 
 Recommendation:
-Coordinate with backend to require `isPublic === true` for share (see backend review). On the client, after upload completes, hydrate `isPublic` / `shareUrl` from the created video response so UI state matches the server before the user toggles.
+Align backend; hydrate upload state from API after create.
 
-**PR comment (line 2):**  
-**High:** UI treats only `isPublic === true` as public, but the API still shares videos when `isPublic` is undefined/default true. Please align backend rules and sync initial upload state from the API so the switch reflects real shareability.
+**Re-verification:** ✅ Fixed — backend now requires explicit `isPublic === true`; `useVideoUpload` hydrates `isPublic` and `shareUrl` from `createdVideo` response.
 
 ---
 
@@ -60,16 +56,15 @@ File Path: src/pages/share/video/components/PublicShareMediaLayout.tsx
 Lines: 47, 51-55
 
 Description:
-Optional UI uses `subtitle ? <p>...</p> : null` and `showProfile && profile ? <div>...</div> : null` instead of logical AND when the false branch renders nothing.
+Optional UI used `condition ? <Node /> : null` instead of logical AND.
 
 Impact:
-- Inconsistent with project JSX conventions; slightly noisier diffs
+- Style/convention inconsistency
 
 Recommendation:
-Use `subtitle && <p className="...">...</p>` and `showProfile && profile && <div>...</div>` (drop redundant ternary fallbacks).
+Use `subtitle && <p>…</p>` and `showProfile && profile && <div>…</div>`.
 
-**PR comment (line 47):**  
-**Medium:** Prefer `subtitle && <p>…</p>` over `subtitle ? <p>…</p> : null` per our JSX conditional rendering guideline.
+**Re-verification:** Partially fixed — subtitle uses `&&` (line 47); profile sidebar still uses `showProfile && profile ? (…) : null` (lines 51-55). Optional one-line cleanup remains.
 
 ---
 
@@ -77,14 +72,10 @@ Use `subtitle && <p className="...">...</p>` and `showProfile && profile && <div
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Dead fallback calls non-existent `/profile` API | HIGH | Open | `src/pages/share/video/index.tsx` | 27-35 |
-| 2 | Upload public switch vs backend `isPublic` semantics | HIGH | Open | `src/pages/videos/utils/video-public.utils.ts` | 1-4 |
-| 3 | Ternary-with-null for optional JSX | MEDIUM | Open | `src/pages/share/video/components/PublicShareMediaLayout.tsx` | 47, 51-55 |
+| 1 | Dead fallback calls non-existent `/profile` API | HIGH | ✅ Fixed | `src/pages/share/video/index.tsx` | — |
+| 2 | Upload public switch vs backend `isPublic` semantics | HIGH | ✅ Fixed | `src/pages/videos/utils/video-public.utils.ts` | 1-4 |
+| 3 | Ternary-with-null for optional JSX | MEDIUM | Partially fixed | `src/pages/share/video/components/PublicShareMediaLayout.tsx` | 51-55 |
 
-**Positive notes:** Public route registered without auth at `/share/video/:id`. `apiClient` correctly skips session clear/redirect on 401 for `PUBLIC_VIDEOS_PREFIX`. Feature colocated under `src/pages/share/video/` with components, constants, and utils. `ShareUrlCopyField` reused across table, mobile card, and upload panel. `ResizeObserver` in `PublicShareMediaLayout` cleans up on unmount. `cn()` used for layout classes.
+**Positive notes:** Public route at `/share/video/:id`; `apiClient` 401 handling for public URLs; role-scoped share profile display; feature colocated under `src/pages/share/video/`.
 
-**Skipped (per prompt):** Ad-hoc slate/blue palette and Ant `!` overrides (out of scope). Low-severity items (empty `<track>`, `SportProfileItem` typing on public profile, duplicate `SHARE_PAGE_EDIT_TIP` string).
-
-**Re-review update (latest `SKSH-273`):** All 3 findings re-verified and still reproducible; no new frontend Critical/High/Medium issues were introduced by the latest role/display updates.
-
-**Merge readiness:** Blocked — 2 open High and 1 open Medium findings.
+**Merge readiness:** No open Critical/High blockers. One optional Medium style cleanup (profile block ternary) — acceptable to merge or fix in follow-up.
