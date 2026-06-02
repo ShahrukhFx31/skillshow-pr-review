@@ -47,3 +47,7 @@ Consider defaulting `isPublic` to `false` on new uploads (schema migration or se
 **Positive notes:** Clean layering (routes → controller → `VideoPublicService` → repository). Params validated with `videoIdParamSchema`. Public route correctly sits outside `/v1` auth. `VIDEO_PUBLIC_SHARE_QUERY` excludes library videos. Profile subset via `toPublicVideoShareProfile` strips coach emails, nickname, and DOB. Good unit coverage for share utils, profile mapping, and service. Swagger documents the new endpoint.
 
 **Skipped (per prompt):** Medium issues (e.g. silent `catch` in `getPublicVideoShareProfileForUser`, view-count inflation from bots, separate find + increment round-trips).
+
+**Re-review update (latest `SKSH-273`):** Finding re-verified and still reproducible; no additional backend Critical/High issues were introduced in the new role-based profile mapping commit.
+
+**Merge readiness:** Blocked — 1 open High finding.

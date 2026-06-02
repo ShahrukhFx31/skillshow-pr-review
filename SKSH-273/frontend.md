@@ -84,3 +84,7 @@ Use `subtitle && <p className="...">...</p>` and `showProfile && profile && <div
 **Positive notes:** Public route registered without auth at `/share/video/:id`. `apiClient` correctly skips session clear/redirect on 401 for `PUBLIC_VIDEOS_PREFIX`. Feature colocated under `src/pages/share/video/` with components, constants, and utils. `ShareUrlCopyField` reused across table, mobile card, and upload panel. `ResizeObserver` in `PublicShareMediaLayout` cleans up on unmount. `cn()` used for layout classes.
 
 **Skipped (per prompt):** Ad-hoc slate/blue palette and Ant `!` overrides (out of scope). Low-severity items (empty `<track>`, `SportProfileItem` typing on public profile, duplicate `SHARE_PAGE_EDIT_TIP` string).
+
+**Re-review update (latest `SKSH-273`):** All 3 findings re-verified and still reproducible; no new frontend Critical/High/Medium issues were introduced by the latest role/display updates.
+
+**Merge readiness:** Blocked — 2 open High and 1 open Medium findings.
