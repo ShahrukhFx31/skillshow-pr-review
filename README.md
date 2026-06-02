@@ -49,7 +49,6 @@ pr-review/
 | SKSH-294 | `frontend.md`, `backend.md` |
 | SKSH-295 | `frontend.md`, `backend.md` |
 | SKSH-303 | `frontend.md` |
-| SKSH-312 | `frontend.md`, `backend.md` |
 | SKSH-315 | `frontend.md` |
 
 ## Completed tickets
@@ -68,3 +67,4 @@ Archived under `pr-review/Completed/` when all findings are **Fixed** or **Accep
 | SKSH-268 | `frontend.md` |
 | SKSH-277 | `frontend.md`, `backend.md` |
 | SKSH-302 | `frontend.md` |
+| SKSH-312 | `frontend.md`, `backend.md` |
