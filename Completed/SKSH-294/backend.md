@@ -3,9 +3,9 @@
 **Repo:** skillshow  
 **Branch:** `SKSH-294`  
 **Base:** `main...HEAD`  
+**Initial review:** 2026-06-01 (`87785da`)  
+**Re-reviewed:** 2026-06-03 (`6aac15c`) — fixes verified on branch  
 **Scope:** Event lifecycle (`eventStatus`), listing status split (`listingStatus` / legacy `status`), `hostCode`, `streetAddress`, server-side list filters/search, removal of SS Event ID create/check API (Critical / High only)
-
-**Commit:** `87785da` — feat: enhance event management with lifecycle and listing statuses and added host field
 
 **Review note:** Pagination / server-side list behavior (search coverage for `EV{n}`/slug, export scope, client sort vs server pages) is **out of scope** for this review—aligned with phased events list work.
 
@@ -20,10 +20,10 @@ This PR reshapes the event domain: lifecycle status is stored as `eventStatus`, 
 ## Positive notes
 
 - **Routes:** `listEventsQuerySchema` wired with `validate(..., "query")`; pagination capped via `PAGINATION.MAX_LIMIT`.
-- **Repository:** `buildListFilter` uses `escapeRegexSource` for search; listing filter supports legacy documents via `$or` on `listingStatus` / `status`.
-- **Service:** Create/update share `normalizeEventBody` (date/state normalization, `status` → `listingStatus`, `location` build); `hostCode` validated via `partnerRepository.existsActiveByHostCode`.
+- **Repository:** `buildListFilter` uses `escapeRegexSource` for search; listing and lifecycle filters support legacy documents; combined filters use `$and` without clobbering `$or` (`58ca2fc`, `event.repository.test.ts`).
+- **Service:** Create/update share `normalizeEventBody`; slug/seq duplicate retry on create (`c4ca523`); `hostCode` validated via `partnerRepository.existsActiveByHostCode`.
 - **DTO:** `toEventDto` resolves listing/lifecycle defaults for legacy rows; list/detail/create/update return consistent `EventResponseDto`.
-- **Tests:** Controller, validation, and model tests updated for new fields; hostCode rejection covered.
+- **Tests:** `tests/repositories/event.repository.test.ts` covers legacy `eventStatus` / combined listing filters.
 
 ---
 
@@ -34,7 +34,7 @@ Lifecycle `eventStatus` list filter ignores legacy documents
 
 Risk Level: HIGH
 File Path: src/repositories/event.repository.ts
-Lines: 45-47
+Lines: 54-64
 
 Description:
 `listingStatus` filtering includes a fallback for documents that only have legacy `status`. `eventStatus` filtering uses a direct equality match with no fallback for documents missing `eventStatus` (pre-migration rows). `toEventDto` exposes `pending` via `resolveEventLifecycleStatus`, but those rows will not appear when `?eventStatus=pending` is used.
@@ -47,30 +47,33 @@ Recommendation:
 Mirror the listing pattern, e.g. when `query.eventStatus` is set:
 
 ```typescript
-filter["$or"] = [
-  { eventStatus: query.eventStatus },
-  {
-    eventStatus: { $exists: false },
-    ...(query.eventStatus === EVENT_DEFAULT_LIFECYCLE_STATUS
-      ? {} /* match legacy rows with no field */
-      : { _id: { $exists: false } }), // or omit filter if no safe default
-  },
-];
+statusClauses.push({
+  $or: [{ eventStatus: query.eventStatus }, legacyMissingEventStatus],
+});
 ```
 
 Or run a one-time migration to set `eventStatus` on all existing events before enabling the filter in production.
 
 **PR comment (line 46):** **High:** `eventStatus` is a strict equality filter with no legacy fallback (unlike `listingStatus` above). Rows missing `eventStatus` won’t match `?eventStatus=pending` even though `toEventDto` defaults them to `pending`—please mirror the listing `$or` pattern or backfill the field.
+
+**Re-review (2026-06-03):** **Fixed** in `58ca2fc` — `buildListFilter` adds `$or` with `{ eventStatus: { $exists: false } }` when filtering `pending`; non-default lifecycle uses impossible `_id` guard on legacy rows. Covered by `tests/repositories/event.repository.test.ts` (lines 63-111).
 ---
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines | PR comment line |
 |---|--------|------|--------|------|-------|-----------------|
-| 1 | Lifecycle `eventStatus` list filter ignores legacy documents | HIGH | Open | src/repositories/event.repository.ts | 45-47 | 46 |
+| 1 | Lifecycle `eventStatus` list filter ignores legacy documents | HIGH | ✅ Fixed | src/repositories/event.repository.ts | 54-64 | 62 |
 
 ### Out of scope (pagination — not reported)
 
 | Title | Status |
 |--------|--------|
 | List `search` does not match public `EV{n}` ID or `slug` | Accepted — deferred with server-paginated listing phase |
+
+### Re-review notes (2026-06-03)
+
+- Fix commit: `58ca2fc` (filter logic); branch tip `6aac15c` (includes main merge).
+- **No new Critical or High** findings on the current backend diff.
+
+**Merge readiness:** No open Critical/High blockers on the backend diff.
