@@ -3,109 +3,112 @@
 **Repo:** skillshow-admin-ui  
 **Branch:** `SKSH-274`  
 **Base:** `main...HEAD`  
-**Scope:** Export All CSV on events, partners, video library, and teams (Critical / High / Medium only)
+**Initial review:** 2026-05-29  
+**Re-reviewed:** 2026-06-03 — merge at `8f0b36fc` (server-side export-all, events refactor, partners/crew/skillshow-users/admin edit request)  
+**Scope:** Export All CSV on list dashboards (Critical / High / Medium only)
 
-**Files changed:** 13 files across events, partners, video library, and teams dashboards  
-**Findings:** 3 (0 Critical, 0 High, 3 Medium)
+**Files changed (vs `main`):** 21 files — events, partners, video library, management users, admin edit requests, shared `fetch-all-paginated-list`, `EXPORT_ALL_LABEL`  
+**Findings:** 4 total — 3 from initial review (**all fixed**), **1 new Medium** (dead code)
 
 ---
+
+## Overview
+
+Export All is implemented on server-paginated lists via `handleExportAll` + `fetchAllPaginatedListItems` / `fetchAllEventsListItems` (events, partners, crew users, skillshow users, admin edit requests). Video library and app users keep client-side filtered export via `onExportAllReady`. Teams export UI from the first commit was removed; `export-teams-csv.ts` remains unused.
+
+---
+
+## Findings (initial review)
 
 ---
 Teams “Export All” ignores search unlike other dashboards
 
-Risk Level: MEDIUM
-File Path: src/pages/teams/index.tsx
-Lines: 46-60, 64-68
+Risk Level: MEDIUM  
+File Path: src/pages/teams/index.tsx  
+Lines: (removed)
 
 Description:
-On events, partners, and video library, **Export All** exports the full **filtered** result set (active/inactive tab, search, type/format filters) across all pages. On teams, **Export Teams** uses `filteredTeams` (respects search) while **Export All** calls `exportTeamsAsCsv(teams)` and always exports the full API list, ignoring the search box.
+On the first revision, teams **Export All** exported the full `teams` array while **Export Teams** respected search.
 
 Impact:
-- A user filtering by team name and clicking **Export All** gets more rows than the list they are viewing, with no indication search was bypassed
-- Cross-page behavior is inconsistent and easy to misread as “export everything on screen / in this filter”
+- Users could export rows outside the filtered card grid.
 
 Recommendation:
-Align with other pages: make **Export All** export `filteredTeams` (all matches for the current search), and reserve a separate label (e.g. **Export entire list**) only if product truly needs search-ignored export. Example:
+Align **Export All** with `filteredTeams`, or remove teams export from this PR.
 
-```tsx
-const exportAllTeams = useCallback(() => {
-  if (filteredTeams.length === 0) {
-    message.warning("No teams to export");
-    return;
-  }
-  exportTeamsAsCsv(filteredTeams);
-}, [filteredTeams]);
-```
-
-**PR comment (line 54):** **Medium:** Export All on teams exports the full `teams` array and ignores search; other dashboards export the filtered set. Please align semantics (or rename) so users don’t get unexpected rows.
+**Re-review:** ✅ **Fixed** — teams export buttons were removed from `teams/index.tsx`; the page no longer exposes export actions (teams dropped from this PR’s UX scope).
 
 ---
 
 ---
-Teams export buttons are redundant when search is empty
+Teams export buttons redundant when search is empty
 
-Risk Level: MEDIUM
-File Path: src/pages/teams/index.tsx
-Lines: 46-68
+Risk Level: MEDIUM  
+File Path: src/pages/teams/index.tsx  
+Lines: (removed)
 
 Description:
-When `search` is empty, `filteredTeams` equals `teams`, so **Export Teams** and **Export All** invoke the same export with the same row set. Both buttons stay visible whenever `teams.length > 0`.
+With no search, **Export Teams** and **Export All** exported identical data.
 
 Impact:
-- Duplicate controls with no functional difference in the default state
-- Extra UI noise on the only teams list page that uses a card grid instead of a paginated table
+- Duplicate controls with no functional difference.
 
 Recommendation:
-Hide **Export All** when `search.trim() === ""`, show it only when a search filter is active (mirroring the two-level export model), or collapse to a single export action until search narrows the list.
+Show a single export action or hide **Export All** until search is active.
 
-**PR comment (line 67):** **Medium:** With no search, Export Teams and Export All export the same data—consider showing one button or differentiating behavior.
+**Re-review:** ✅ **Fixed** — both export buttons removed with teams export scope.
 
 ---
 
 ---
 Events export-all wired through table props though parent already owns `filteredRows`
 
-Risk Level: MEDIUM
-File Path: src/pages/events/dashboard/index.tsx
-Lines: 117-119, 172-178
+Risk Level: MEDIUM  
+File Path: src/pages/events/dashboard/index.tsx  
 File Path: src/pages/events/dashboard/components/events-table.tsx
-Lines: 125-136
 
 Description:
-`filteredRows` is computed in `EventsDashboardPage` and passed into `EventsTable` solely so a child `useEffect` can register `onExportAllReady`. Partners and video library keep filtering inside the table and register handlers there; events already has `filteredRows` at the page level (unlike selection/page state, which lives in the table).
+`filteredRows` and `onExportAllReady` were passed into `EventsTable` only to register export-all.
 
 Impact:
-- Extra prop surface (`filteredRows`, `onExportAllReady`) on `EventsTable` without rendering use
-- Harder to follow than colocating export-all next to `onExportAllClick` in the page (same pattern as `teams/index.tsx`)
+- Extra props and child `useEffect` for logic the page already owned.
 
 Recommendation:
-Register export-all in the page and drop the props from the table:
+Colocate `handleExportAll` in `index.tsx` and remove table export-all wiring.
 
-```tsx
-// index.tsx
-const handleExportAll = useCallback(() => {
-  if (filteredRows.length === 0) {
-    message.warning("No events to export");
-    return;
-  }
-  exportEventsRowsAsCsv(filteredRows);
-}, [filteredRows]);
+**Re-review:** ✅ **Fixed** — `handleExportAll` lives in `index.tsx` (lines 120–140) and calls `fetchAllEventsListItems` with `debouncedSearch`, `eventTypeFilter`, and `listingStatus`. `EventsTable` only registers page export via `onExportReady`; `onExportAllReady` and `filteredRows` props are gone from `types.ts` / table.
 
-<EventsHeader onExportAllClick={handleExportAll} ... />
-```
+---
 
-Remove `filteredRows`, `onExportAllReady`, and the second `useEffect` from `events-table.tsx`.
+## Findings (re-review)
 
-**PR comment (line 178):** **Medium:** `filteredRows` is only passed into `EventsTable` for export-all registration—the page already owns that data; consider handling export-all in `index.tsx` like teams and drop the extra props/effect.
+---
+Unused `export-teams-csv` module left in tree
+
+Risk Level: MEDIUM  
+File Path: src/pages/teams/utils/export-teams-csv.ts  
+Lines: 1-25
+
+Description:
+`exportTeamsAsCsv` is defined but has no imports anywhere in the repo. Teams list UI no longer wires export after the follow-up changes.
+
+Impact:
+- Dead code shipped with the PR; confuses future readers and suggests incomplete teams export work.
+
+Recommendation:
+Delete `src/pages/teams/utils/export-teams-csv.ts`, or wire it when teams export is product-ready.
+
+**PR comment:** **Medium:** `export-teams-csv.ts` is unused after teams export was removed—please delete the file or hook it up.
 
 ---
 
 ## Positive notes
 
-- Export-all mirrors existing export patterns (`onExportReady` / `useEffect` cleanup) on partners and video library, including empty-state handlers in `video-library-tab-content.tsx`.
-- Tabbed partners/video library only mount the active panel, so `exportAllHandler` tracks the current active/inactive tab correctly.
-- Teams CSV utility is colocated under `src/pages/teams/utils/export-teams-csv.ts` with kebab-case naming.
-- Empty exports show warnings consistently (`message` / `toast`) before download.
+- Server-paginated export-all correctly applies current filters (search, tab, type/role) and fetches all pages via `fetchAllPaginatedListItems` / `fetchAllEventsListItems`.
+- Partners uses a single `PartnersTable` instance with page-level `handleExportAll` (no duplicate tab handlers).
+- Events export applies `tableSort` to the full fetched set before CSV generation.
+- Shared `EXPORT_ALL_LABEL` constant improves label consistency on most pages.
+- Export warnings migrated to Sonner `toast` on events table (aligned with video library).
 
 ---
 
@@ -113,6 +116,9 @@ Remove `filteredRows`, `onExportAllReady`, and the second `useEffect` from `even
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Teams “Export All” ignores search unlike other dashboards | MEDIUM | Open | src/pages/teams/index.tsx | 46-60, 64-68 |
-| 2 | Teams export buttons redundant when search is empty | MEDIUM | Open | src/pages/teams/index.tsx | 46-68 |
-| 3 | Events export-all wired through table props though parent owns `filteredRows` | MEDIUM | Open | src/pages/events/dashboard/index.tsx | 117-119, 172-178 |
+| 1 | Teams Export All ignores search | MEDIUM | ✅ Fixed | src/pages/teams/index.tsx | — |
+| 2 | Teams export buttons redundant when search empty | MEDIUM | ✅ Fixed | src/pages/teams/index.tsx | — |
+| 3 | Events export-all prop drill through table | MEDIUM | ✅ Fixed | src/pages/events/dashboard/index.tsx | 120-140 |
+| 4 | Unused `export-teams-csv` module | MEDIUM | Open | src/pages/teams/utils/export-teams-csv.ts | 1-25 |
+
+**Re-review verdict:** Original feedback addressed. **Merge after removing dead `export-teams-csv.ts`** (or restoring teams export with correct semantics).
