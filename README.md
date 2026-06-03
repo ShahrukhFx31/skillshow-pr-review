@@ -47,6 +47,7 @@ Folders under `pr-review/{TICKET}/` (not yet in `Completed/`).
 | SKSH-281 | `frontend.md`, `backend.md` |
 | SKSH-294 | `frontend.md`, `backend.md` |
 | SKSH-297 | `frontend.md`, `backend.md` |
+| SKSH-307 | `frontend.md`, `backend.md` |
 
 ## Completed tickets
 

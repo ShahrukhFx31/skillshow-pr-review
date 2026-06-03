@@ -1,0 +1,43 @@
+# Backend PR Review — skillshow (`SKSH-307`)
+
+**Repo:** skillshow  
+**Branch:** `sksh-307`  
+**Base:** `main...HEAD`  
+**Commits:** `65ce1bd` (fix: poll changes), merges from `main`  
+**Scope:** Paginated linked-athlete Media Pool APIs (`GET /v1/coach/media-pool`, `GET /v1/parent-link/media-pool`), `relationId` on parent dashboard athlete feed, shared video repository queries (Critical & High only)
+
+---
+
+## Overview
+
+Adds `mediaPool` handlers on coach and parent link controllers, routes, and services. Coach `getAthleteMediaPool` mirrors parent scope building (accepted relations + `linkedAt`), paginates via `videoRepository.countLinkedAthletesVideosLean` / `findLinkedAthletesFeedPaginatedLean`, and returns `MediaPoolFeedPage` with presigned thumbnails and `relationId`. Parent service refactors scope/name helpers and reuses the same repository methods; dashboard `athleteFeed` now includes `relationId` and drops videos without a resolvable relation. Types live in `src/types/media-pool.types.ts`; query parsing in `src/utils/media-pool-query.utils.ts`.
+
+---
+
+## Findings
+
+No **Critical** or **High** issues identified in scope.
+
+---
+
+## Positive notes
+
+- **Layering:** Controllers stay thin (auth/role gate on coach, parse query, delegate); Mongo access in `videoRepository`; mapping in services.
+- **Pagination:** `pageSize` capped at 50 in both util and service; empty scopes return stable `{ items: [], total: 0 }`.
+- **Reads:** `.lean()` + `DASHBOARD_VIDEO_SELECT` on list path; shared `linkedAthletesVideoFilter` for count and page queries.
+- **Auth:** Coach endpoint checks coach role before service call; routes sit under global `/api/v1` auth.
+- **Types:** `MediaPoolFeedItem`, `MediaPoolFeedPage`, `MediaPoolListOpts` in `src/types/media-pool.types.ts`.
+- **Tests:** Parent dashboard test asserts `relationId` on athlete feed items.
+
+**Note (not raised as High):** Media-pool routes use `parseMediaPoolQuery(req.query)` like existing coach list endpoints (`parseCoachAthleteListQuery`), not Joi + `validatedQuery`. Parallel `countDocuments` + `find` matches `findRecentByLinkedAthletesLean` and other video-repo patterns (no `$facet` helper on this model). Video documents have no `isDeleted` field; linked-athlete queries match pre-existing dashboard feed filters.
+
+---
+
+## Summary
+
+| # | Title | Risk | Status | File | Lines |
+|---|--------|------|--------|------|-------|
+
+*No Critical/High findings.*
+
+**Merge readiness:** No open backend Critical/High blockers on `sksh-307`.
