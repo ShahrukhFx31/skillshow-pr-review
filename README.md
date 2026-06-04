@@ -40,7 +40,6 @@ Folders under `pr-review/{TICKET}/` (not yet in `Completed/`).
 
 | Ticket   | Reports |
 |----------|---------|
-| SKSH-196 | `frontend.md`, `backend.md` |
 | SKSH-265 | `frontend.md`, `backend.md` |
 | SKSH-271 | `frontend.md`, `backend.md` |
 | SKSH-311 | `frontend.md`, `backend.md` |
@@ -58,6 +57,7 @@ Archived under `pr-review/Completed/` when all findings are **Fixed** or **Accep
 | SKSH-178 | `frontend.md`, `backend.md` |
 | SKSH-181 | `frontend.md`, `backend.md` |
 | SKSH-189 | `frontend.md`, `backend.md` |
+| SKSH-196 | `frontend.md`, `backend.md` |
 | SKSH-243 | `frontend.md` |
 | SKSH-258 | `frontend.md` |
 | SKSH-261 | `backend.md` |
