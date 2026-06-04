@@ -4,17 +4,18 @@
 **Branch:** `SKSH-274`  
 **Base:** `main...HEAD`  
 **Initial review:** 2026-05-29  
-**Re-reviewed:** 2026-06-03 — merge at `8f0b36fc` (server-side export-all, events refactor, partners/crew/skillshow-users/admin edit request)  
+**Re-reviewed:** 2026-06-03 — merge at `8f0b36fc`  
+**Final re-review:** 2026-06-03 — `29482054` (dead code removed; all findings resolved)  
 **Scope:** Export All CSV on list dashboards (Critical / High / Medium only)
 
-**Files changed (vs `main`):** 21 files — events, partners, video library, management users, admin edit requests, shared `fetch-all-paginated-list`, `EXPORT_ALL_LABEL`  
-**Findings:** 4 total — 3 from initial review (**all fixed**), **1 new Medium** (dead code)
+**Files changed (vs `main`):** 20 files — events, partners, video library, management users, admin edit requests, shared `fetch-all-paginated-list`, `EXPORT_ALL_LABEL`  
+**Findings:** 4 Medium — **all resolved**
 
 ---
 
 ## Overview
 
-Export All is implemented on server-paginated lists via `handleExportAll` + `fetchAllPaginatedListItems` / `fetchAllEventsListItems` (events, partners, crew users, skillshow users, admin edit requests). Video library and app users keep client-side filtered export via `onExportAllReady`. Teams export UI from the first commit was removed; `export-teams-csv.ts` remains unused.
+Export All is implemented on server-paginated lists via `handleExportAll` + `fetchAllPaginatedListItems` / `fetchAllEventsListItems` (events, partners, crew users, skillshow users, admin edit requests). Video library and app users use client-side filtered export via `onExportAllReady`. Teams export was dropped from scope; unused `export-teams-csv.ts` is no longer in the branch diff.
 
 ---
 
@@ -90,15 +91,15 @@ File Path: src/pages/teams/utils/export-teams-csv.ts
 Lines: 1-25
 
 Description:
-`exportTeamsAsCsv` is defined but has no imports anywhere in the repo. Teams list UI no longer wires export after the follow-up changes.
+`exportTeamsAsCsv` was defined but had no imports after teams export UI was removed.
 
 Impact:
-- Dead code shipped with the PR; confuses future readers and suggests incomplete teams export work.
+- Dead code on the branch; no runtime effect.
 
 Recommendation:
-Delete `src/pages/teams/utils/export-teams-csv.ts`, or wire it when teams export is product-ready.
+Delete `src/pages/teams/utils/export-teams-csv.ts`.
 
-**PR comment:** **Medium:** `export-teams-csv.ts` is unused after teams export was removed—please delete the file or hook it up.
+**Final re-review (`29482054`):** ✅ **Fixed** — file removed from branch; no longer in `main...HEAD` diff. `exportTeamsAsCsv` has zero references in the repo.
 
 ---
 
@@ -119,6 +120,6 @@ Delete `src/pages/teams/utils/export-teams-csv.ts`, or wire it when teams export
 | 1 | Teams Export All ignores search | MEDIUM | ✅ Fixed | src/pages/teams/index.tsx | — |
 | 2 | Teams export buttons redundant when search empty | MEDIUM | ✅ Fixed | src/pages/teams/index.tsx | — |
 | 3 | Events export-all prop drill through table | MEDIUM | ✅ Fixed | src/pages/events/dashboard/index.tsx | 120-140 |
-| 4 | Unused `export-teams-csv` module | MEDIUM | Open | src/pages/teams/utils/export-teams-csv.ts | 1-25 |
+| 4 | Unused `export-teams-csv` module | MEDIUM | ✅ Fixed | src/pages/teams/utils/export-teams-csv.ts | — |
 
-**Re-review verdict:** Original feedback addressed. **Merge after removing dead `export-teams-csv.ts`** (or restoring teams export with correct semantics).
+**Final verdict:** All review feedback addressed. **Approve for merge.**
