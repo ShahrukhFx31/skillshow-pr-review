@@ -77,4 +77,5 @@ Archived under `pr-review/Completed/` when all findings are **Fixed** or **Accep
 | SKSH-274 | `frontend.md` |
 | SKSH-303 | `frontend.md`, `backend.md` |
 | SKSH-315 | `frontend.md` |
+| SKSH-317 | `frontend.md` |
 | SKSH-307 | `frontend.md`, `backend.md` |
