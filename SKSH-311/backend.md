@@ -3,11 +3,9 @@
 **Repo:** skillshow  
 **Branch:** `SKSH-311`  
 **Base:** `main...HEAD`  
-**Re-verified:** 2026-06-02 (full pr-review) — @ `b4badca`  
-**Scope reviewed:** All **10 files** in `git diff main...HEAD` — My Videos server list (`source`, date range, `listStatus` via distribution pipeline), stats classifier refactor, tests.  
-**Findings:** 1 prior High — **✅ Fixed**; **0 new** Critical/High
-
-**Note:** Admin pagination SKSH-311 is on `main` / archived in `Completed/SKSH-311/`. This report covers **My Videos server-side tabulation** (+ fix commit).
+**Re-verified:** 2026-06-02 (full pr-review) — @ `a80e6bb`  
+**Scope reviewed:** All **19 files** in `git diff main...HEAD` — events server list + My Videos list filters/distribution pipeline, tests.  
+**Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency enforced)
 
 **Aligned with:** [frontend.md](./frontend.md)
 
@@ -15,18 +13,23 @@
 
 | File group | Reviewed |
 |------------|----------|
-| `video.types.ts`, `video-query.types.ts`, `video.validation.ts` | ✅ |
-| `video.utils.ts`, `video-distribution-list-status.utils.ts`, `video-distribution-pipeline.utils.ts` | ✅ |
-| `video.repository.ts`, `video.service.ts` | ✅ |
-| `vendor.constants.ts`, `tests/utils/video.utils.test.ts` | ✅ |
+| `event.*` (controller, service, repository, validation, constants, types, tests) | ✅ |
+| `video.*` (utils, pipeline, list-status, repository, service, validation, types, tests) | ✅ |
+| `vendor.constants.ts` | ✅ |
 
 ### pr-review counts
 
 | Metric | Count |
 |--------|-------|
 | New findings added | 0 |
-| Prior Open → Fixed | 1 |
+| Prior Open → Fixed this pass | 1 |
 | Remaining Open | 0 |
+
+---
+
+## GitHub comments (Open findings)
+
+None.
 
 ---
 
@@ -37,10 +40,48 @@ Risk Level: HIGH
 File Path: src/utils/video-distribution-pipeline.utils.ts  
 Lines: 53-58
 
-Description (original):
-`listStatus=partial` was validated but ignored in `buildVideoDistributionListFilter` (only `processingStatus` fields were mapped).
+Description:
+`listStatus=partial` was validated but ignored in the pre-aggregation Mongo match.
 
-**Re-review:** ✅ **Fixed** — `listWithDistribution` passes `listStatus` into `countWithDistributionFilter` / `aggregateWithDistribution`. Pipeline adds distribution log lookups, `buildDistributionListStatusAddFieldsStage()`, and `$match: { distributionListStatus: listStatus }` (includes `partial` via `classifyVideoDistributionListStatus` / `$switch` branches). Stats reuse the same classifier. Tests cover partial classification in `video.utils.test.ts`.
+Impact:
+- Partial filter on My Videos returned unfiltered pages after server-side migration.
+
+Recommendation:
+Use distribution pipeline + `distributionListStatus` classifier (implemented).
+
+**Re-review:** ✅ **Fixed** — `countWithDistributionFilter` / `aggregateWithDistribution` apply `buildDistributionListStatusAddFieldsStage()` and `$match: { distributionListStatus: listStatus }`. Classifier shared with stats; tests in `video.utils.test.ts`.
+
+**PR comment:** Resolved on branch.
+
+**Status:** ✅ Fixed
+
+---
+
+---
+Event `getEvents` merges raw `req.query` (Global consistency)
+
+Risk Level: HIGH  
+File Path: src/controllers/event.controller.ts  
+Lines: 44-47
+
+Description (original):
+`getEvents` used `(validatedQuery ?? req.query)`, unlike other list controllers migrated to `validatedQuery` + `DEFAULT_LIST_QUERY` only.
+
+Impact:
+- Raw query strings could bypass Joi coercion for `pageSize`, `sortBy`, `status`.
+- **Global consistency** violation within the same PR’s list-endpoint pattern.
+
+Recommendation:
+```ts
+const query = {
+  ...DEFAULT_LIST_QUERY,
+  ...(req as ValidatedQueryRequest).validatedQuery,
+} as EventListQuery;
+```
+
+**Re-review:** ✅ **Fixed** at lines 44–47. Controller tests updated to pass `validatedQuery` for filter/pagination cases.
+
+**PR comment:** Resolved on branch.
 
 **Status:** ✅ Fixed
 
@@ -50,12 +91,13 @@ Description (original):
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | `listStatus=partial` validated but not filtered | HIGH | ✅ Fixed | src/utils/video-distribution-pipeline.utils.ts | 53-58 |
+| 1 | `listStatus=partial` not filtered server-side | HIGH | ✅ Fixed | src/utils/video-distribution-pipeline.utils.ts | 53-58 |
+| 2 | Event `getEvents` merges raw `req.query` fallback | HIGH | ✅ Fixed | src/controllers/event.controller.ts | 44-47 |
 
-## Positive notes
+## Positive notes (DRY / KISS / Global consistency)
 
-- Distribution list status logic centralized in `video-distribution-list-status.utils.ts` (shared by pipeline filter and stats).
-- Without `listStatus`, count stays on `countDocuments` (no unnecessary aggregation).
-- `applyVideoCreatedAtRangeFilter` + `source` / `inVideoLibrary` filters remain in pre-aggregation `$match` for efficiency.
+- **DRY:** Events use shared `createListQuerySchema`, `EVENT_LIST_SORT_FIELD_MAP`, `runListQueryAggregate` (replaces bespoke `listPageWithTotal` `$facet`). Video list status centralized in `video-distribution-list-status.utils.ts`.
+- **Global consistency:** Event list aligns with app-user/partner/video-library pattern (`validatedQuery`, `pageSize`, `status` query param).
+- **KISS:** Event service delegates pagination to repository `listRows`; video `listStatus` filter uses one pipeline builder.
 
-**Merge readiness:** ✅ Clear — no Open Critical/High. Frontend aligned ([frontend.md](./frontend.md)).
+**Merge readiness:** ✅ Clear — **0 Open** Critical/High. Aligned with [frontend.md](./frontend.md).
