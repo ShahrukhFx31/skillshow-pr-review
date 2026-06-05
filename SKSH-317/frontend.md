@@ -6,7 +6,8 @@
 **Commit:** `5f25dd7f` — feat: add StateCityFormFields component and integrate into event forms  
 **Reviewed:** 2026-06-05 — full `/pr-review` pass (entire diff)  
 **Scope reviewed:** Full PR diff — **8 files** in `git diff main...HEAD`  
-**Findings:** 0 Critical, 1 High, 2 Medium — **2 Open**, **1 Accepted**
+**Findings:** 0 Critical, 1 High, 2 Medium — **2 Open**, **1 Accepted**  
+**Note:** Findings are for the developer to address; review-only (no agent fixes).
 
 ### Files reviewed
 
@@ -85,7 +86,7 @@ Complete the global refactor in this PR (or split as immediate follow-up before 
 2. Update imports in **PR files**: `StateCityFormFields.tsx`.
 3. Re-export from account-general for backward compatibility if needed.
 
-**PR comment (line 5):**  
+**PR comment (`StateCityFormFields.tsx` line 5):**  
 **High (DRY / Global consistency):** `StateCityFormFields` is shared under `src/components/forms/` but still imports `useStateAndCitySelector` from `pages/user/account/general`. Please lift the hook (and helpers) to `src/hooks/` or `src/components/forms/hooks/` so the global extraction is complete and cross-feature forms do not depend on account-general internals.
 
 ---
@@ -96,7 +97,7 @@ Complete the global refactor in this PR (or split as immediate follow-up before 
 Risk Level: MEDIUM  
 **Status:** Open  
 File Path: src/pages/dashboard/crew/onboarding/form-helpers.tsx  
-Lines: 5-7
+Lines: 6
 
 **Description:**  
 **KISS** — `CrewStateCityFields` only forwards `form` to `StateCityFormFields` with no crew-specific rules, layout, or behavior. The PR introduced this wrapper when deduplicating crew markup instead of using the shared component at the call site. Re-verified on `5f25dd7f`: unchanged one-liner relay.
@@ -115,8 +116,8 @@ import { StateCityFormFields } from "@/components/forms";
 <StateCityFormFields form={form} />
 ```
 
-**PR comment (line 5):**  
-**Medium (KISS):** `CrewStateCityFields` only relays `form` to `StateCityFormFields` with no added behavior. Consider removing this wrapper and importing `StateCityFormFields` directly from `@/components/forms` at the call site.
+**PR comment (`form-helpers.tsx` line 6):**  
+**Medium (KISS):** This one-liner only relays `form` to `StateCityFormFields` with no added behavior. Consider removing `CrewStateCityFields` and importing `StateCityFormFields` directly from `@/components/forms` in `background-tax-step.tsx` (line 64).
 
 ---
 
@@ -126,6 +127,6 @@ import { StateCityFormFields } from "@/components/forms";
 |---|--------|------|--------|------|-------|
 | 1 | Event form city/state column order changed (state first) | MEDIUM | Accepted | `schedule-location-section.tsx` | 45 |
 | 2 | Shared component promoted without lifting its hook | HIGH | Open | `StateCityFormFields.tsx` | 5, 40-46 |
-| 3 | `CrewStateCityFields` is a no-op pass-through wrapper | MEDIUM | Open | `form-helpers.tsx` | 5-7 |
+| 3 | `CrewStateCityFields` is a no-op pass-through wrapper | MEDIUM | Open | `form-helpers.tsx` | 6 |
 
-**Merge readiness (skillshow-admin-ui):** One Open **High** (hook not lifted with `StateCityFormFields`) plus one Open **Medium** (pass-through wrapper). Field order (#1) accepted as intentional. No new findings on full re-review at `5f25dd7f`.
+**Merge readiness (skillshow-admin-ui):** One Open **High** (#2) plus one Open **Medium** (#3) for the developer. #1 Accepted as intentional. Review-only — no agent fixes applied.
