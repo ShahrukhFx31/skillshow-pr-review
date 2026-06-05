@@ -2,6 +2,50 @@
 
 Review currently opened PR files in **skillshow-distribution-orchestrator** (distribution / BullMQ microservice).
 
+## DRY & KISS (mandatory — always enforce)
+
+Every review **must** actively hunt for DRY and KISS violations. Do not skip this lens. Report findings when rules below are broken at the stated severity.
+
+### DRY (Don't Repeat Yourself)
+
+- **One source of truth** — worker event handlers, job failure persistence, vendor publish flow, status transitions, and queue payload shapes must use established helpers (`createWorkerEventHandlers`, `abortDistribution`, `persistError`, `BaseVendorService`, `updateOverallJobStatus`) — not copy-pasted per worker.
+- **Reuse before rewrite** — extend `BaseVendorService`, `BaseController`, `BaseRepository`; constants in `src/constants/`; types in `src/types/` — no inline queue names, error stages, or vendor strings.
+- **No parallel worker patterns** — flag a second worker that duplicates enqueue/process/error logic when the existing worker + service layout could be extended.
+- **Cross-layer duplication** — same status update or vendor call repeated in controller, worker, and helper; consolidate to service/helper once.
+
+### KISS (Keep It Simple, Stupid)
+
+- **Simplest correct async flow** — enqueue from controller, process in worker, delegate to service; no inline vendor HTTP or S3 work on the request path.
+- **No speculative abstraction** — flag generic job routers, wrapper services, or config layers used for a single queue/vendor.
+- **Flat job handlers** — worker `process` should read as a short sequence: load context → call service → update status; avoid deep nested conditionals without extraction.
+- **Right-sized modules** — one worker per queue concern; do not merge unrelated vendors into one god-worker or split one job into excessive micro-helpers.
+
+### Global / cross-cutting changes (mandatory — full PR consistency)
+
+When the PR introduces or modifies a **shared/global** artifact, **every file in this PR** that should use it must be migrated — no mixed old/new patterns in the same diff.
+
+**Shared/global artifacts (orchestrator):** `createWorkerEventHandlers`, `abortDistribution` / `persistError`, `BaseVendorService`, `src/helpers/` job-status utils, `src/constants/` (queues, error stages), `src/types/` job payloads, `VendorRegistry`, shared queue enqueue patterns.
+
+**Reviewer must:**
+1. Spot global refactors or new shared worker/vendor helpers in the PR diff.
+2. Scan the **entire PR diff** for sibling workers, controllers, queues, and vendors that should adopt the same pattern.
+3. Report **CRITICAL** or **HIGH** when the PR updates a shared handler/helper but leaves other **touched** workers or vendors on legacy copy-paste or old failure/status paths.
+4. **Recommendation** must list concrete remaining files **in this PR** to update (or justify a scoped exception as `Accepted` with reason).
+
+Tag **Global consistency** in Description (with **DRY** / **KISS** when applicable).
+
+### When to report
+
+| Violation | Severity |
+|-----------|----------|
+| Duplicate failure/status logic that can leave jobs stuck or double-process | **CRITICAL** or **HIGH** |
+| Global/shared change not applied to all relevant files **in the PR diff** | **CRITICAL** or **HIGH** |
+| Copy-paste worker handlers or vendor code instead of `BaseVendorService` | **HIGH** |
+| Unnecessary indirection in job path that obscures retries/idempotency | **HIGH** (operational risk) |
+| Minor duplication with no job-correctness risk | Skip unless user asks |
+
+In **Description** / **Recommendation**, name whether the issue is **DRY**, **KISS**, and/or **Global consistency** and point to the existing abstraction to reuse.
+
 ## Focus on
 
 ### Layer separation & architecture
@@ -59,7 +103,7 @@ Review currently opened PR files in **skillshow-distribution-orchestrator** (dis
 
 Report **Critical** and **High** only (skip Medium, Low, Info unless asked).
 
-For structure, logging, and constants placement, report **High** only when they affect job correctness, data loss, stuck distributions, security, or operational failure at scale; skip cosmetic one-offs.
+For structure, logging, constants placement, **DRY**, **KISS**, and **Global consistency**, report **High** when they affect job correctness, data loss, stuck distributions, security, duplicated logic that will drift, incomplete migration of shared worker/vendor changes across the PR, or operational failure at scale; skip cosmetic one-offs.
 
 ## Finding report format
 

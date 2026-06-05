@@ -2,6 +2,50 @@
 
 Review currently opened PR files in **skillshow** (main API).
 
+## DRY & KISS (mandatory — always enforce)
+
+Every review **must** actively hunt for DRY and KISS violations. Do not skip this lens. Report findings when rules below are broken at the stated severity.
+
+### DRY (Don't Repeat Yourself)
+
+- **One source of truth** — pagination, filter/sort parsing, list aggregation, Joi shapes, response mapping, and error handling must not be copy-pasted across controllers/services/repos when a shared util, base class, or existing domain method already exists (`listPageWithTotal`, `list-query-aggregation.utils`, `DEFAULT_LIST_QUERY`, `BaseController` helpers).
+- **Reuse before rewrite** — extend `BaseController` / `BaseService` / `BaseRepository`; add to `src/constants/` and `src/types/` instead of inline literals; centralize validation in `src/validation/`.
+- **No parallel implementations** — flag a second list/bulk/directory endpoint pattern for the same entity family when one established path could be parameterized or shared.
+- **Cross-layer duplication** — same business rule or query condition repeated in controller + service + repository; extract to service or repository once.
+
+### KISS (Keep It Simple, Stupid)
+
+- **Simplest correct design** — prefer straightforward controller → service → repository flow over extra indirection (wrapper services, pass-through methods, generic factories used once).
+- **No speculative abstraction** — flag helpers, base subclasses, or config-driven layers added for a single call site or hypothetical reuse.
+- **Flat over clever** — reject nested ternaries, opaque pipeline builders, or aggregation pipelines that could use an existing util with less branching.
+- **Right-sized modules** — do not split one feature into excessive micro-files; do not merge unrelated concerns into one bloated file. Match established feature layout.
+
+### Global / cross-cutting changes (mandatory — full PR consistency)
+
+When the PR introduces or modifies a **shared/global** artifact, **every file in this PR** that should use it must be migrated — no mixed old/new patterns in the same diff.
+
+**Shared/global artifacts (backend):** `src/utils/` (e.g. `list-query-aggregation.utils`), `BaseController` / `BaseService` / `BaseRepository`, `src/constants/`, `src/types/`, `src/validation/` schemas, shared list/bulk patterns (`listPageWithTotal`, `DEFAULT_LIST_QUERY`, `validatedQuery`).
+
+**Reviewer must:**
+1. Spot global refactors or new shared abstractions in the PR diff.
+2. Scan the **entire PR diff** (all changed files) for sibling endpoints, controllers, services, repos, routes, and tests that should adopt the same pattern.
+3. Report **CRITICAL** or **HIGH** when the PR updates the shared piece but leaves other **touched** domains on the legacy path (e.g. `list-query-aggregation` applied to `app-user` but not `crew-user` / `partner` / `skillshow-user` in the same PR).
+4. **Recommendation** must list concrete remaining files **in this PR** to update (or justify a scoped exception as `Accepted` with reason).
+
+Tag **Global consistency** in Description (with **DRY** / **KISS** when applicable).
+
+### When to report
+
+| Violation | Severity |
+|-----------|----------|
+| Duplicate logic that can cause divergent bugs (two pagination paths, two validation rules) | **CRITICAL** or **HIGH** |
+| Global/shared change not applied to all relevant files **in the PR diff** | **CRITICAL** or **HIGH** |
+| Copy-paste of established patterns (list facet, `validatedQuery`, constants) across new endpoints | **HIGH** |
+| Unnecessary abstraction layers or pass-through code that obscures flow | **HIGH** (maintainability at scale) |
+| Minor duplication of 2–3 lines with no behavioral risk | Skip unless user asks |
+
+In **Description** / **Recommendation**, name whether the issue is **DRY**, **KISS**, and/or **Global consistency** and point to the existing abstraction to reuse.
+
 ## Focus on
 
 ### Layer separation & architecture (skillshow)
@@ -55,7 +99,7 @@ Review currently opened PR files in **skillshow** (main API).
 
 Report **Critical** and **High** only (skip Medium, Low, Info unless asked).
 
-For layer placement, types/constants, and logging issues, report **High** only when they cause incorrect behavior, security exposure, serious performance risk, or clear maintainability debt at scale; skip cosmetic one-offs.
+For layer placement, types/constants, logging, **DRY**, **KISS**, and **Global consistency** issues, report **High** when they cause incorrect behavior, security exposure, serious performance risk, duplicated logic that will drift, incomplete migration of shared changes across the PR, or clear maintainability debt at scale; skip cosmetic one-offs.
 
 ## Finding report format
 
