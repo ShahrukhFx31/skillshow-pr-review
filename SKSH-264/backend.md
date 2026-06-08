@@ -3,6 +3,7 @@
 **Repo:** skillshow (main API)  
 **Branch:** `sksh-264`  
 **Base:** `main...HEAD`  
+**Re-verified:** 2026-06-08 @ `1024a8b`  
 **Scope:** Crew onboarding PATCH — optional `section` query param for section-specific success toast (Critical & High only)  
 **Findings:** 0 (0 Critical, 0 High)
 
