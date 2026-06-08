@@ -58,14 +58,15 @@ The following shared modules are **frozen**. Do **not** recommend edits to them.
 | `src/hooks/use-server-table-controls.ts` | Search debounce, sort, pagination wiring for server list pages |
 | `src/utils/table-sort.ts` | Ant `onChange` sorter → `setSort(sortBy, sortOrder)` (`asc`/`desc`) |
 | `src/theme/adapter/antd.adapter.tsx` | Global Ant Design theme tokens and component overrides |
+| `src/components/AuditLogTable.tsx` | Shared audit-log table (columns, formatting, pagination wiring) |
 
 **If the PR diff modifies any protected file:** report **CRITICAL** — *Protected module changed*. Note the file path; recommend reverting the change or moving the work to a dedicated ticket scoped to that shared module. Mark **Accepted** only when the ticket explicitly authorizes changing that module.
 
 **Recommendations must fix consumers, not protected modules.** When integration is wrong, point to the feature page/hook/table and show how to call the existing API correctly.
 
-## Strict contract review (mandatory — server lists & destructive actions)
+## Strict contract review (mandatory — server lists, destructive actions & audit logs)
 
-When the PR adds or changes **server-driven list pages**, **table sort/pagination**, or **delete/destructive flows**, **strictly** verify the consumer follows the frozen modules — even when those modules are unchanged in the diff.
+When the PR adds or changes **server-driven list pages**, **table sort/pagination**, **delete/destructive flows**, or **audit-log UI**, **strictly** verify the consumer follows the frozen modules — even when those modules are unchanged in the diff.
 
 ### Server-driven list pages
 
@@ -87,6 +88,13 @@ When the PR adds or changes **server-driven list pages**, **table sort/paginatio
 - Do **not** recommend changes to `antd.adapter.tsx` for feature-specific styling. Overrides belong on the consuming component (`className`, `classNames`, colocated tokens).
 - Flag **CRITICAL** if the PR edits `antd.adapter.tsx` without an explicit theme ticket.
 
+### Audit log UI
+
+1. **Shared table** — Audit-log lists render via `AuditLogTable` (props for rows, loading, pagination/sort when server-driven). Do not duplicate audit-log column defs, date/actor formatting, or table markup in feature pages.
+2. **Server lists** — When audit logs are paginated server-side, parent page uses `useServerTableControls` + passes `page`/`pageSize`/`setSort` into `AuditLogTable` (or equivalent props contract). `queryKey` must include all list inputs.
+3. **Read-only** — Audit tables are display-only; mutations belong in the feature action flow, not inside `AuditLogTable`.
+4. Flag **HIGH** for new per-feature audit `Table` implementations that copy `AuditLogTable` layout instead of composing it.
+
 ### When to report (protected / contract)
 
 | Violation | Severity |
@@ -97,8 +105,10 @@ When the PR adds or changes **server-driven list pages**, **table sort/paginatio
 | UI filter/status values sent to API without mapping to backend allow-list | **HIGH** |
 | New ad-hoc destructive confirm instead of `DestructiveActionConfirmModal` | **HIGH** |
 | `pageSize` or defaults out of sync with backend list bounds | **HIGH** |
+| Audit-log UI bypasses `AuditLogTable` with duplicate table/column markup | **HIGH** |
+| Server-driven audit list missing `useServerTableControls` / pagination contract | **HIGH** |
 
-Tag **Protected module** and/or **Contract** in Description. When the ticket includes a backend review, cross-check `pr-review/{TICKET}/backend.md` for list-query / sort / pagination alignment.
+Tag **Protected module** and/or **Contract** in Description. When the ticket includes a backend review, cross-check `pr-review/{TICKET}/backend.md` for list-query / sort / pagination / audit-log alignment.
 
 ## Focus on
 

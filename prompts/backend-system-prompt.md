@@ -55,14 +55,17 @@ The following shared modules are **frozen**. Do **not** recommend edits to them.
 | `src/validation/list-query.validation.ts` | `createListQuerySchema`, `LIST_QUERY_PAGINATION`, `LIST_QUERY_DEFAULTS`, optional filter helpers |
 | `src/utils/list-query-aggregation.utils.ts` | `runPaginatedAggregate`, `runListQueryAggregate`, `listSortSpec`, `buildUserDocListMatch`, `buildRegexOrMatch`, pagination/sort helpers |
 | `src/utils/list-row-repository.utils.ts` | `orderListRowsByKeys`, `runUpdateManyByUserIds`, `runUpdateManyByPartnerIds`, `runTouchModificationByUserIds` |
+| `src/services/mongo-change-stream.service.ts` | MongoDB change-stream lifecycle (watch, resume, reconnect, shutdown) |
+| `src/utils/audit-log.utils.ts` | Audit-log document shape, diff/redaction, persistence helpers |
+| `src/utils/change-stream.utils.ts` | Change-stream event parsing, namespace/operation filtering, resume tokens |
 
 **If the PR diff modifies any protected file:** report **CRITICAL** — *Protected module changed*. Note the file path; recommend reverting the change or moving the work to a dedicated ticket scoped to that shared module. Mark **Accepted** only when the ticket explicitly authorizes changing that module.
 
 **Recommendations must fix consumers, not protected modules.** When integration is wrong, point to the controller/service/repository/validation file and show how to call the existing API correctly.
 
-## Strict contract review (mandatory — list endpoints & bulk row ops)
+## Strict contract review (mandatory — list endpoints, bulk row ops & audit / change streams)
 
-When the PR adds or changes **admin list endpoints**, **aggregation list queries**, or **bulk updates by user/partner**, **strictly** verify the consumer follows the frozen modules — even when those modules are unchanged in the diff.
+When the PR adds or changes **admin list endpoints**, **aggregation list queries**, **bulk updates by user/partner**, or **audit logging / change-stream handling**, **strictly** verify the consumer follows the frozen modules — even when those modules are unchanged in the diff.
 
 ### List query validation
 
@@ -85,6 +88,15 @@ When the PR adds or changes **admin list endpoints**, **aggregation list queries
 1. Use `runUpdateManyByUserIds` / `runUpdateManyByPartnerIds` / `runTouchModificationByUserIds` instead of inline `updateMany` with duplicated `{ user: { $in } }` / `{ partnerId: { $in } }` + `isDeleted: false` filters.
 2. Flag **HIGH** when bulk paths skip empty-array guards or audit touch helpers the codebase already centralizes.
 
+### Audit logs & change streams
+
+1. **Change-stream entry point** — MongoDB `watch` / resume / reconnect logic lives in `mongo-change-stream.service.ts` only. Feature code registers handlers; do not open ad-hoc `collection.watch()` in services, repositories, or `index.ts`.
+2. **Event parsing** — Use `change-stream.utils.ts` for operation type, namespace, document key, and resume-token handling. Flag **HIGH** for inline change-event parsing duplicated across handlers.
+3. **Audit persistence** — Audit rows are built and written through `audit-log.utils.ts` (diff, actor, entity ref, redaction). Do not hand-roll audit document shapes or field-level diff logic in domain services.
+4. **List API** — Audit-log list endpoints follow the same `createListQuerySchema` + `validatedQuery` contract as other admin lists; repositories may use `runListQueryAggregate` when appropriate.
+5. **Idempotency & ordering** — Handlers must tolerate duplicate/replayed change events; do not assume exactly-once delivery without the service’s dedup/resume contract.
+6. Flag **CRITICAL** for new change streams that bypass redaction/sensitive-field rules centralized in `audit-log.utils.ts`.
+
 ### When to report (protected / contract)
 
 | Violation | Severity |
@@ -96,8 +108,12 @@ When the PR adds or changes **admin list endpoints**, **aggregation list queries
 | `sortBy` allow-list mismatch with frontend table columns | **HIGH** |
 | Inline `updateMany` duplicating `list-row-repository.utils` patterns | **HIGH** |
 | Missing `escapeRegex` / soft-delete / user-doc match on list queries | **HIGH** |
+| Ad-hoc `collection.watch()` or change-handler logic outside `mongo-change-stream.service.ts` | **HIGH** or **CRITICAL** |
+| Inline audit-log diff/write logic instead of `audit-log.utils.ts` | **HIGH** |
+| Duplicate change-event parsing instead of `change-stream.utils.ts` | **HIGH** |
+| Audit-log list endpoint bypasses `createListQuerySchema` / `validatedQuery` | **HIGH** |
 
-Tag **Protected module** and/or **Contract** in Description. When the ticket includes a frontend review, cross-check `pr-review/{TICKET}/frontend.md` for list-control / sort / pagination alignment.
+Tag **Protected module** and/or **Contract** in Description. When the ticket includes a frontend review, cross-check `pr-review/{TICKET}/frontend.md` for list-control / sort / pagination / `AuditLogTable` alignment.
 
 ## Focus on
 
