@@ -46,6 +46,60 @@ Tag **Global consistency** in Description (with **DRY** / **KISS** when applicab
 
 In **Description** / **Recommendation**, name whether the issue is **DRY**, **KISS**, and/or **Global consistency** and point to the existing module to reuse.
 
+## Protected modules (frozen — do not modify)
+
+The following shared modules are **frozen**. Do **not** recommend edits to them. Do **not** report findings **inside** these files unless the PR itself changes them (then flag scope violation — see below).
+
+| File | Role |
+|------|------|
+| `src/components/pagination-bar.tsx` | External rows-per-page + page controls for server-driven tables |
+| `src/components/destructive-action-confirm-modal.tsx` | Standard delete/destructive confirm (Modal desktop / Drawer mobile) |
+| `src/hooks/use-pagination.ts` | Page/pageSize state with `filterKey` reset; `bar` + `hidden` Table pagination |
+| `src/hooks/use-server-table-controls.ts` | Search debounce, sort, pagination wiring for server list pages |
+| `src/utils/table-sort.ts` | Ant `onChange` sorter → `setSort(sortBy, sortOrder)` (`asc`/`desc`) |
+| `src/theme/adapter/antd.adapter.tsx` | Global Ant Design theme tokens and component overrides |
+
+**If the PR diff modifies any protected file:** report **CRITICAL** — *Protected module changed*. Note the file path; recommend reverting the change or moving the work to a dedicated ticket scoped to that shared module. Mark **Accepted** only when the ticket explicitly authorizes changing that module.
+
+**Recommendations must fix consumers, not protected modules.** When integration is wrong, point to the feature page/hook/table and show how to call the existing API correctly.
+
+## Strict contract review (mandatory — server lists & destructive actions)
+
+When the PR adds or changes **server-driven list pages**, **table sort/pagination**, or **delete/destructive flows**, **strictly** verify the consumer follows the frozen modules — even when those modules are unchanged in the diff.
+
+### Server-driven list pages
+
+1. **Controls hook** — Page state comes from `useServerTableControls` (or `usePagination` when sort/search is not needed). Do not hand-roll `useState` for `page`/`pageSize` when this hook fits.
+2. **`filterKey` reset** — Any change to search, sort, or `extraFilterState` must reset page via the hook’s `filterKey` (from `usePagination` inside `useServerTableControls`). Flag **HIGH** when filters/sort/search change but page is not reset (stale empty pages).
+3. **API params** — List `queryFn` must pass `page`, `pageSize`, `sortBy`, `sortOrder`, and debounced search (and feature filters) to the service. `queryKey` must include every input that affects the response (same deps as the request).
+4. **Sort wiring** — Table `onChange` must call `applyServerSort(action, sorter, setSort)`. Column `key` (or `dataIndex` string) must match backend `sortBy` allow-list. Map UI-only filter values before the API call when labels differ from server enums.
+5. **Pagination UI** — Prefer `usePagination` → `hidden` on `Table` (`style: { display: "none" }`) + `<PaginationBar {...bar} />`. Flag **HIGH** when a server list duplicates hidden-pagination + `PaginationBar` markup instead of `usePagination`’s `hidden`/`bar`.
+6. **Bounds alignment** — Defaults must match backend `LIST_QUERY_PAGINATION`: page `1`, default page size `10`, max `100` (`DEFAULT_LIST_PAGINATION` / `PAGE_SIZE_OPTIONS` on the frontend). Flag **HIGH** when a new list sends `pageSize` outside `1–100` or uses a different default without an explicit API exception.
+
+### Destructive / delete flows
+
+1. Use `DestructiveActionConfirmModal` with `open`, `onClose`, `onConfirm`, `confirmLoading`, and `itemName` or custom `title`/`description`.
+2. Flag **HIGH** for new ad-hoc `Modal`/`Drawer` delete confirmations that duplicate this component.
+3. Verify `onClose` is blocked while `confirmLoading` (handled by the modal — consumers must pass loading state correctly).
+
+### Ant Design theme
+
+- Do **not** recommend changes to `antd.adapter.tsx` for feature-specific styling. Overrides belong on the consuming component (`className`, `classNames`, colocated tokens).
+- Flag **CRITICAL** if the PR edits `antd.adapter.tsx` without an explicit theme ticket.
+
+### When to report (protected / contract)
+
+| Violation | Severity |
+|-----------|----------|
+| PR modifies a protected module | **CRITICAL** |
+| Server list bypasses `useServerTableControls` / `usePagination` / `PaginationBar` / `applyServerSort` with parallel state | **HIGH** |
+| `sortBy` / `sortOrder` / pagination params or `queryKey` deps mismatch API contract | **HIGH** or **CRITICAL** (400s, wrong page, stale data) |
+| UI filter/status values sent to API without mapping to backend allow-list | **HIGH** |
+| New ad-hoc destructive confirm instead of `DestructiveActionConfirmModal` | **HIGH** |
+| `pageSize` or defaults out of sync with backend list bounds | **HIGH** |
+
+Tag **Protected module** and/or **Contract** in Description. When the ticket includes a backend review, cross-check `pr-review/{TICKET}/backend.md` for list-query / sort / pagination alignment.
+
 ## Focus on
 
 ### Performance & React

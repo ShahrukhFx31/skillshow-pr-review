@@ -46,6 +46,59 @@ Tag **Global consistency** in Description (with **DRY** / **KISS** when applicab
 
 In **Description** / **Recommendation**, name whether the issue is **DRY**, **KISS**, and/or **Global consistency** and point to the existing abstraction to reuse.
 
+## Protected modules (frozen — do not modify)
+
+The following shared modules are **frozen**. Do **not** recommend edits to them. Do **not** report findings **inside** these files unless the PR itself changes them (then flag scope violation — see below).
+
+| File | Role |
+|------|------|
+| `src/validation/list-query.validation.ts` | `createListQuerySchema`, `LIST_QUERY_PAGINATION`, `LIST_QUERY_DEFAULTS`, optional filter helpers |
+| `src/utils/list-query-aggregation.utils.ts` | `runPaginatedAggregate`, `runListQueryAggregate`, `listSortSpec`, `buildUserDocListMatch`, `buildRegexOrMatch`, pagination/sort helpers |
+| `src/utils/list-row-repository.utils.ts` | `orderListRowsByKeys`, `runUpdateManyByUserIds`, `runUpdateManyByPartnerIds`, `runTouchModificationByUserIds` |
+
+**If the PR diff modifies any protected file:** report **CRITICAL** — *Protected module changed*. Note the file path; recommend reverting the change or moving the work to a dedicated ticket scoped to that shared module. Mark **Accepted** only when the ticket explicitly authorizes changing that module.
+
+**Recommendations must fix consumers, not protected modules.** When integration is wrong, point to the controller/service/repository/validation file and show how to call the existing API correctly.
+
+## Strict contract review (mandatory — list endpoints & bulk row ops)
+
+When the PR adds or changes **admin list endpoints**, **aggregation list queries**, or **bulk updates by user/partner**, **strictly** verify the consumer follows the frozen modules — even when those modules are unchanged in the diff.
+
+### List query validation
+
+1. **Schema** — List routes use `createListQuerySchema({ sortByValues, statusValues, filters? })` from `list-query.validation.ts`. Per-entity `sortByValues` / `statusValues` live in that entity’s validation file — not inlined in controllers.
+2. **Middleware** — Route wired with `validate(schema, "query")`; controller reads `req.validatedQuery` only (never raw `req.query` for typed list params).
+3. **Bounds** — Pagination uses shared constants: `DEFAULT_PAGE` `1`, `DEFAULT_PAGE_SIZE` `10`, `MAX_PAGE_SIZE` `100`. Defaults: `sortBy` `createdAt`, `sortOrder` `desc` (`LIST_QUERY_DEFAULTS`).
+4. **Cross-stack alignment** — `sortByValues` must match frontend column keys passed through `applyServerSort`. Flag **HIGH** when UI sends a sort field the schema does not allow (400) or backend allows fields the UI cannot request.
+
+### List aggregation & repositories
+
+1. **Prefer shared pipeline helpers** — `runListQueryAggregate` or `runPaginatedAggregate` with `listSortSpec`, `listPaginationSkip`, and `buildRegexOrMatch` / `buildUserDocListMatch` as appropriate. Flag **HIGH** for ad-hoc `$facet` / parallel `find`+`count` duplicates when these utils fit.
+2. **Sort tie-break** — `listSortSpec` adds `_id: -1`; do not drop tie-break when replicating sort behavior elsewhere.
+3. **Search** — Regex search must use `escapeRegex` via `buildRegexOrMatch`; flag **HIGH** for raw user input in `$regex` without escaping.
+4. **Soft-delete / scoping** — User-doc lists use `buildUserDocListMatch` (`isDeleted: false`, `userDoc.isDeleted: false`, status → `userDoc.isActive`). Do not omit established match fields.
+5. **Count strategy** — Use `useCountDocuments: true` only for flat collections where `countDocuments(match)` is correct; default aggregate `$count` for joined pipelines.
+6. **Row order** — When aggregation does not guarantee order, use `orderListRowsByKeys` to preserve requested key order.
+
+### Bulk row updates
+
+1. Use `runUpdateManyByUserIds` / `runUpdateManyByPartnerIds` / `runTouchModificationByUserIds` instead of inline `updateMany` with duplicated `{ user: { $in } }` / `{ partnerId: { $in } }` + `isDeleted: false` filters.
+2. Flag **HIGH** when bulk paths skip empty-array guards or audit touch helpers the codebase already centralizes.
+
+### When to report (protected / contract)
+
+| Violation | Severity |
+|-----------|----------|
+| PR modifies a protected module | **CRITICAL** |
+| List endpoint without `createListQuerySchema` + `validatedQuery` | **HIGH** or **CRITICAL** |
+| Ad-hoc pagination/sort/search validation or unbounded `pageSize` | **HIGH** |
+| Duplicate aggregation/list pipeline instead of `list-query-aggregation.utils` | **HIGH** |
+| `sortBy` allow-list mismatch with frontend table columns | **HIGH** |
+| Inline `updateMany` duplicating `list-row-repository.utils` patterns | **HIGH** |
+| Missing `escapeRegex` / soft-delete / user-doc match on list queries | **HIGH** |
+
+Tag **Protected module** and/or **Contract** in Description. When the ticket includes a frontend review, cross-check `pr-review/{TICKET}/frontend.md` for list-control / sort / pagination alignment.
+
 ## Focus on
 
 ### Layer separation & architecture (skillshow)
