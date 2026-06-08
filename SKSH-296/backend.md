@@ -28,11 +28,11 @@
 
 **High:** The `User` watcher handles every `users` collection update and then queries `findByUserIdIncludingDeleted` to filter — please narrow the stream pipeline or avoid watching the full `User` model so app/crew/athlete updates do not add DB load on every write.
 
-### 4. `src/utils/change-stream.utils.ts` lines 304-320 / `skillshow-user-history.watcher.ts` lines 240-256
+### 4. `src/utils/change-stream.utils.ts` lines 61-76 / `skillshow-user-history.watcher.ts` lines 240-256
 
 **High:** CDC mappers always set `oldValue: null`, so `buildDescription` never emits `changed from … to …` — updates are recorded as `set to` even when replacing an existing value. Enable collection pre-images or resolve prior values before persisting audit rows.
 
-### 5. `src/utils/audit-log.utils.ts` lines 210-237 / `skillshow-user-history.watcher.ts` lines 39-54
+### 5. `src/utils/audit-log.utils.ts` lines 53-80 / `skillshow-user-history.watcher.ts` lines 39-54
 
 **High:** `PendingActorStore` is in-memory per process — in multi-instance deployments actor attribution can be lost or wrong when the write and CDC flush land on different replicas. Use a shared store or synchronous history append in the service layer for actor-critical events.
 
@@ -124,7 +124,7 @@ CDC audit rows never capture prior field values
 
 Risk Level: HIGH  
 File Path: src/utils/change-stream.utils.ts  
-Lines: 304-320
+Lines: 61-76
 
 Description:
 **Contract / data accuracy.** `mapCdcFieldChange`, `handleUserChange` (`isActive`, `roles`), and related CDC paths always set `oldValue: null`. `buildDescription` in `audit-log.utils.ts` uses `oldValue` for `changed from … to …` clauses, but persisted rows only ever produce `set to` or `was cleared` wording — even when replacing an existing email, role, or status.
@@ -136,7 +136,7 @@ Impact:
 Recommendation:
 Enable MongoDB `changeStreamPreAndPostImages` on `users` / `skillshowusers` and read pre-image fields, or capture previous values in the service before `save()` and write history synchronously for patch flows.
 
-**PR comment (line 314):**  
+**PR comment (line 72):**  
 **High:** CDC mappers always set `oldValue: null`, so `buildDescription` never emits `changed from … to …` — updates are recorded as `set to` even when replacing an existing value. Enable collection pre-images or resolve prior values before persisting audit rows.
 
 **Status:** Open
@@ -148,7 +148,7 @@ In-memory pending-actor store is not replica-safe
 
 Risk Level: HIGH  
 File Path: src/utils/audit-log.utils.ts  
-Lines: 210-237
+Lines: 53-80
 
 Description:
 **Contract / reliability.** `PendingActorStore` lives in process memory (`skillshow-user-history.watcher.ts`). `setPendingActor` / `setPendingActors` run in the HTTP handler on whichever replica serves the request, while the debounced CDC flush (1s) may execute on the same or a different replica after a load-balanced write. `take()` then misses the actor and falls back to `createdBy` or the subject user.
@@ -160,7 +160,7 @@ Impact:
 Recommendation:
 For actor-critical paths, append history synchronously in `skillshow-user.service` (actor is known), using CDC only as a safety net; or store pending actors in Redis with TTL keyed by `linkedUserId`.
 
-**PR comment (line 213):**  
+**PR comment (line 53):**  
 **High:** `PendingActorStore` is in-memory per process — in multi-instance deployments actor attribution can be lost or wrong when the write and CDC flush land on different replicas. Use a shared store or synchronous history append in the service layer for actor-critical events.
 
 **Status:** Open
@@ -194,7 +194,7 @@ For actor-critical paths, append history synchronously in `skillshow-user.servic
 | 1 | Change streams run on every API replica — duplicate audit rows | CRITICAL | Open | src/app.ts | 173-175 |
 | 2 | Change stream service lacks resume, reconnect, and shutdown | HIGH | Open | src/services/mongo-change-stream.service.ts | 26-43 |
 | 3 | User collection watcher processes all user updates | HIGH | Open | src/services/skillshow-user-history.watcher.ts | 113-117, 190-201 |
-| 4 | CDC audit rows never capture prior field values | HIGH | Open | src/utils/change-stream.utils.ts | 304-320 |
-| 5 | In-memory pending-actor store is not replica-safe | HIGH | Open | src/utils/audit-log.utils.ts | 210-237 |
+| 4 | CDC audit rows never capture prior field values | HIGH | Open | src/utils/change-stream.utils.ts | 61-76 |
+| 5 | In-memory pending-actor store is not replica-safe | HIGH | Open | src/utils/audit-log.utils.ts | 53-80 |
 
 **Merge readiness:** **Not merge-ready** — 1 Critical and 4 High Open findings (multi-replica duplicate history and change-stream lifecycle must be addressed before scale-out).

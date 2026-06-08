@@ -16,13 +16,13 @@
 
 ## GitHub comments (Open findings)
 
-### 1. `src/api/services/skillshowUserService.ts` line 22
+### 1. `src/pages/management/skillshow-users/onboarding/components/team-user-audit-log.tsx` line 25
 
-**High:** `getSkillshowUser` is still typed as `Promise<TeamUserRow>` but the API now returns `history[]` on detail — please add `TeamUserDetailRow` (or extend the row type) so consumers don't need unsafe casts.
+**High:** Detail response is cast to a local `TeamUserDetailWithHistory` to read `history` because `getSkillshowUser` is still typed as `Promise<TeamUserRow>` — please add `TeamUserDetailRow` in feature/API types and remove this cast.
 
-### 2. `src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx` lines 147-149
+### 2. `src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx` line 199
 
-**High:** `patchTeamUserMutation` only invalidates `TEAM_USERS_LIST_QUERY_KEY` after save — please also invalidate `["management", "team-users", "detail", userId]` (and consider a short delayed refetch) so the audit log picks up CDC-written history after edit.
+**High:** This PR wires self-fetching `<TeamUserAuditLog />`, but `patchTeamUserMutation` `onSuccess` (lines 147-148) still only invalidates `TEAM_USERS_LIST_QUERY_KEY` — please also invalidate `["management", "team-users", "detail", userId]` (and consider a short delayed refetch) so the audit log picks up CDC-written history after edit.
 
 ### 3. `src/components/audit-log/AuditLogTable.tsx` line 1
 
@@ -34,8 +34,8 @@
 Detail API response type omits `history`
 
 Risk Level: HIGH  
-File Path: src/api/services/skillshowUserService.ts  
-Lines: 22-25
+File Path: src/pages/management/skillshow-users/onboarding/components/team-user-audit-log.tsx  
+Lines: 7-9, 25
 
 Description:
 **Contract / DRY.** Backend `getSkillshowUser` now returns `SkillshowUserDetailRow` with `history: SkillshowUserHistoryEntryDto[]`. Frontend `getSkillshowUser` still returns `Promise<TeamUserRow>`, and `TeamUserAuditLog` casts with a local `TeamUserDetailWithHistory` type instead of a shared API type.
@@ -64,8 +64,8 @@ export function getSkillshowUser(userId: string): Promise<TeamUserDetailRow> {
 
 Remove the cast in `team-user-audit-log.tsx`.
 
-**PR comment (line 22):**  
-**High:** `getSkillshowUser` is still typed as `Promise<TeamUserRow>` but the API now returns `history[]` on detail — please add `TeamUserDetailRow` (or extend the row type) so consumers don't need unsafe casts.
+**PR comment (`team-user-audit-log.tsx` line 25):**  
+**High:** Detail response is cast to a local `TeamUserDetailWithHistory` to read `history` because `getSkillshowUser` is still typed as `Promise<TeamUserRow>` — please add `TeamUserDetailRow` in feature/API types and remove this cast.
 
 **Status:** Open
 
@@ -76,7 +76,7 @@ Detail query cache not invalidated after team-user mutations
 
 Risk Level: HIGH  
 File Path: src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx  
-Lines: 143-150
+Lines: 147-148, 199
 
 Description:
 **Contract.** After a successful patch, `patchTeamUserMutation` invalidates only `TEAM_USERS_LIST_QUERY_KEY` and navigates to view. The detail query `["management", "team-users", "detail", userId]` used by `TeamUserOnboardingPage` and `TeamUserAuditLog` is left cached. Combined with backend async CDC (1s debounce), the audit table can show stale or missing entries immediately after save.
@@ -98,8 +98,8 @@ onSuccess: (_row, { userId }) => {
 
 Optionally `refetch` detail after a short delay or return appended history from PATCH for synchronous UI.
 
-**PR comment (line 148):**  
-**High:** `patchTeamUserMutation` only invalidates `TEAM_USERS_LIST_QUERY_KEY` after save — please also invalidate `["management", "team-users", "detail", userId]` (and consider a short delayed refetch) so the audit log picks up CDC-written history after edit.
+**PR comment (`team-user-form.tsx` line 199):**  
+**High:** This PR wires self-fetching `<TeamUserAuditLog />`, but `patchTeamUserMutation` `onSuccess` (lines 147-148) still only invalidates `TEAM_USERS_LIST_QUERY_KEY` — please also invalidate `["management", "team-users", "detail", userId]` (and consider a short delayed refetch) so the audit log picks up CDC-written history after edit.
 
 **Status:** Open
 
@@ -151,8 +151,8 @@ Move/re-export from `src/components/AuditLogTable.tsx` (re-export from `audit-lo
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Detail API response type omits `history` | HIGH | Open | src/api/services/skillshowUserService.ts | 22-25 |
-| 2 | Detail query cache not invalidated after team-user mutations | HIGH | Open | src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx | 143-150 |
+| 1 | Detail API response type omits `history` | HIGH | Open | src/pages/management/skillshow-users/onboarding/components/team-user-audit-log.tsx | 7-9, 25 |
+| 2 | Detail query cache not invalidated after team-user mutations | HIGH | Open | src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx | 147-148, 199 |
 | 3 | Shared AuditLogTable path does not match frozen module location | MEDIUM | Open | src/components/audit-log/AuditLogTable.tsx | 1 |
 
 **Merge readiness:** **Not merge-ready** — 2 High Open findings (type contract + stale audit cache after save); address alongside backend CDC timing. Medium path alignment recommended before wider audit-log rollout.
