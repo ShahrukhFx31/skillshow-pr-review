@@ -3,98 +3,138 @@
 **Repo:** skillshow-admin-ui  
 **Branch:** `SKSH-311`  
 **Base:** `main...HEAD`  
-**Re-verified:** 2026-06-02 (full pr-verify) — @ `5c37a009`  
-**Scope reviewed:** **Full PR diff** — all **27 files** in `git diff main...HEAD` per frontend system prompt.  
-**Findings:** 5 prior + **0 new** Critical/High/Medium — all **✅ Fixed**
+**Re-verified:** 2026-06-08 (full `/pr-review`) — @ `32a9b4e3`  
+**Archived:** 2026-06-08  
+**Scope reviewed:** **50 files** in `git diff main...HEAD`. **SKSH-311 core (21 files):** app-user activity server table, coach teams dashboard, `appUserService`, edit-request status constants/mapping. **Also in branch diff:** destructive-modal consolidation, permission/role/policy delete modals, connections/share-account/video-library/my-videos/management action hooks (DRY modal migration).  
+**Prompts:** `frontend-system-prompt.md`, `backend-system-prompt.md` (DRY / KISS / Global consistency enforced)
 
 **Aligned with:** [backend.md](./backend.md)
 
 ### Full review coverage
 
-| Area | Verdict |
-|------|---------|
-| Prior #1 — `listPartnersDirectory` | ✅ Fixed |
-| Prior #2 — Partner edit/view | ✅ Fixed — `getPartner` |
-| Prior #3 — Reporting managers | ✅ Fixed — `listSkillshowReportingManagers()` |
-| Prior #4 — Filter options from page rows | ✅ Fixed — static/constants helpers |
-| Prior #5 — Video library bulk status N× PATCH | ✅ Fixed — `bulkUpdateVideoLibrary` only |
-| App users dashboard (server table, bulk drawer) | ✅ OK |
-| Video library page/table (server table, bulk) | ✅ OK |
-| Partners dashboard + `partners-bulk-update.tsx` | ✅ OK — `bulkPatchPartners` single API |
-| Partner column sort trim | ✅ OK |
+| File group | Reviewed |
+|------------|----------|
+| `app-users/activity/*` (index, types, utils, actions, columns, table, responsive) | ✅ |
+| `app-users/onboarding/index.tsx` | ✅ |
+| `app-users/teams/dashboard/*` | ✅ |
+| `api/services/appUserService.ts`, `api/services/editRequestService.ts` | ✅ |
+| `editRequest/constants`, `EditRequestListToolbar` (`EDIT_REQUEST_STATUSES` export) | ✅ |
+| Destructive-modal migration (~29 files) | ✅ Spot-checked — delete flows use `itemName` or explicit `title`/`description` |
 
-### pr-verify counts
+### pr-review counts
 
 | Metric | Count |
 |--------|-------|
-| New findings added | 0 |
-| Prior Open → Fixed this pass | 0 (already fixed on branch) |
+| New findings this pass | 0 |
+| Prior Open → Fixed (re-verified) | 3 |
+| Prior Open → Accepted (re-verified) | 1 |
 | Remaining Open | 0 |
 
 ---
 
----
-`listPartnersDirectory` incompatible with paginated directory API
+## GitHub comments (Open findings)
 
-Risk Level: CRITICAL  
-File Path: src/api/services/partnerService.ts  
-Lines: 32-36
-
-**Full re-review:** ✅ **Fixed** — `listPartnersDirectory(): Promise<PartnerRow[]>` against flat `/directory`.
-
-**Status:** ✅ Fixed
+None.
 
 ---
 
 ---
-Partner edit/view loads partner from first list page only
+Edit-request status filter sends UI values to API
 
 Risk Level: HIGH  
-File Path: src/pages/partners/onboarding/index.tsx  
-Lines: 40-48
+File Path: src/pages/management/app-users/activity/index.tsx  
+Lines: 42-57
 
-**Full re-review:** ✅ **Fixed** — `getPartner(partnerId)` detail query.
+Description:
+**DRY / Global consistency.** Edit-requests tab passed raw UI `statusFilter` to the paginated API.
+
+Impact:
+- UI-only values (e.g. `pending_review`) triggered **400** validation errors.
+
+Recommendation:
+Map through `mapUiStatusFilterToBackendStatus` before the API call.
+
+**Re-review (`e8b3e6e2`, confirmed @ `32a9b4e3`):** ✅ **Fixed** — `backendEditRequestStatusFilter` useMemo (lines 42-45) and conditional spread at lines 55-57.
+
+**PR comment:** Resolved on branch.
 
 **Status:** ✅ Fixed
 
 ---
 
 ---
-Reporting manager options built from paginated list (10 rows)
+Edit-request filter options include non-API status keys
 
 Risk Level: HIGH  
-File Path: src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx  
-Lines: 106-109
+File Path: src/pages/management/app-users/activity/utils.ts  
+Lines: 18-22
 
-**Full re-review:** ✅ **Fixed** — `listSkillshowReportingManagers()`.
+Description:
+**DRY / Global consistency.** Filter options built from full `EDIT_REQUEST_STATUS_LABELS` including UI-only keys.
+
+Recommendation:
+Use shared `EDIT_REQUEST_STATUSES` from `editRequest.constants.ts`.
+
+**Re-review (`e8b3e6e2`, confirmed @ `32a9b4e3`):** ✅ **Fixed** — `EDIT_REQUEST_STATUSES` exported to constants; activity utils maps curated list at lines 18-22; `EditRequestListToolbar` imports same list.
+
+**PR comment:** Resolved on branch.
 
 **Status:** ✅ Fixed
 
 ---
 
 ---
-Role filter options derived from current page only
+Coach teams meta query fetches full page payload for total only
 
 Risk Level: MEDIUM  
-File Path: src/pages/management/crew-users/dashboard/index.tsx  
-Lines: 59
+File Path: src/pages/management/app-users/teams/dashboard/index.tsx  
+Lines: 54
 
-**Full re-review:** ✅ **Fixed** — `getCrewDesignationFilterOptions()`; app users use `getAppUserRoleFilterOptions()`.
+Description:
+`allTeamsMeta` used full `DEFAULT_LIST_QUERY` only to read `pagination.total`.
+
+Recommendation:
+Use `pageSize: 1` for the meta fetch.
+
+**Re-review (`e8b3e6e2`, confirmed @ `32a9b4e3`):** ✅ **Fixed** — line 54: `{ ...DEFAULT_LIST_QUERY, pageSize: 1 }`.
+
+**PR comment:** Resolved on branch.
 
 **Status:** ✅ Fixed
 
 ---
 
 ---
-Video library bulk status fires one PATCH per selected row
+UI-only `failed` status filter fetches unfiltered list
 
-Risk Level: HIGH  
-File Path: src/pages/videoLibrary/dashboard/components/video-library-table.tsx  
-Lines: 68-73
+Risk Level: MEDIUM  
+File Path: src/pages/management/app-users/activity/index.tsx  
+Lines: 42-57
 
-**Full re-review:** ✅ **Fixed** — `bulkUpdateMutation` always calls `bulkUpdateVideoLibrary({ videoIds, ... })`; no `statusOnly` / `Promise.all` / per-row `patchVideoLibraryItem` branch.
+Description:
+**KISS / UX.** `failed` has no backend equivalent; mapper returns `undefined`, so API runs unfiltered.
 
-**Status:** ✅ Fixed
+Impact:
+- “Request Failed” filter shows all rows.
+
+Recommendation:
+Exclude `failed` from server-filtered activity options, or disable with tooltip.
+
+**PR comment (anchor `src/pages/management/app-users/activity/index.tsx` lines 42-57):** Selecting **Request Failed** returns `undefined` from `mapUiStatusFilterToBackendStatus` (lines 42-45), so the API call at lines 55-57 omits `status` and returns all rows.
+
+**Accepted (2026-06-05):** Intentional — `failed` kept in shared `EDIT_REQUEST_STATUSES` for parity with athlete edit-request list; unfiltered fetch acceptable for this admin slice.
+
+**Status:** Accepted
+
+---
+
+## Positive notes
+
+- **Server table migration:** Activity + coach teams use `useServerTableControls`, `applyServerSort`, hidden Ant pagination + `PaginationBar`.
+- **Status mapping:** `mapUiStatusFilterToBackendStatus` maps `pending_review` → `submitted`, `accepted` → `accepted`; omits UI-only `failed`.
+- **Modal consolidation:** `DestructiveActionConfirmModal` replaces bespoke delete/unlink modals — DRY win; management delete flows pass `itemName`; unlink flows pass explicit `title`/`description`.
+- **Videos tab:** `getVideoStatusFilterOptions` keys match backend `videoStatus` validation.
+- **Display:** `getEditRequestActivityStatusLabel` uses `mapBackendStatusToUiStatus` for row tags.
 
 ---
 
@@ -102,16 +142,9 @@ Lines: 68-73
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | `listPartnersDirectory` vs paginated directory API | CRITICAL | ✅ Fixed | src/api/services/partnerService.ts | 32-36 |
-| 2 | Partner edit/view uses paginated list only | HIGH | ✅ Fixed | src/pages/partners/onboarding/index.tsx | 40-48 |
-| 3 | Reporting managers from paginated list | HIGH | ✅ Fixed | src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx | 106-109 |
-| 4 | Role/type filter options from current page | MEDIUM | ✅ Fixed | src/pages/management/crew-users/dashboard/index.tsx | 59 |
-| 5 | Video library bulk status uses N× PATCH instead of bulk API | HIGH | ✅ Fixed | src/pages/videoLibrary/dashboard/components/video-library-table.tsx | 68-73 |
+| 1 | Edit-request status filter sends UI values to API | HIGH | ✅ Fixed | `src/pages/management/app-users/activity/index.tsx` | 42-57 |
+| 2 | Edit-request filter options include non-API status keys | HIGH | ✅ Fixed | `src/pages/management/app-users/activity/utils.ts` | 18-22 |
+| 3 | Coach teams meta query fetches full page payload for total only | MEDIUM | ✅ Fixed | `src/pages/management/app-users/teams/dashboard/index.tsx` | 54 |
+| 4 | UI-only `failed` status filter fetches unfiltered list | MEDIUM | Accepted | `src/pages/management/app-users/activity/index.tsx` | 42-57 |
 
-## Positive notes (full diff)
-
-- Server-table pattern consistent on app users, video library, and partners (`useServerTableControls`, meta queries, `PaginationBar`).
-- Partner bulk UI uses `bulkPatchPartners` (matches new backend batched route).
-- App-user bulk UI uses single `bulkPatchAppUsers` (backend batched path verified in [backend.md](./backend.md) #3).
-
-**Merge readiness:** ✅ Clear — archived 2026-06-02.
+**Merge readiness:** ✅ No open Critical/High/Medium blockers. All findings Fixed or Accepted; no new issues in `main...HEAD` at `32a9b4e3`.
