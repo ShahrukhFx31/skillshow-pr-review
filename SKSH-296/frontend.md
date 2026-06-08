@@ -2,31 +2,26 @@
 
 **Repo:** skillshow-admin-ui  
 **Branch:** `SKSK-296` (remote/local; ticket id `SKSH-296`)  
-**Base:** `main...HEAD` (feature commit `9492bfec`)  
-**Scope:** SkillShow user audit log UI — shared `AuditLogTable`, team-user view integration, removal of legacy modification fields (Critical, High, Medium)  
+**Base:** `main...HEAD`  
+**Re-verified:** 2026-06-08 @ `802fba45`  
+**Scope:** SkillShow user audit log UI — shared `AuditLog`, team-user view integration, removal of legacy modification fields (Critical, High, Medium)  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract enforced)
 
 **Aligned with:** [backend.md](./backend.md)
 
-**Findings:** 3 (0 Critical, 2 High, 1 Medium) — **3 Open**
+**Findings:** 3 (0 Critical, 0 High open, 1 Medium) — **2 Fixed**, **1 Accepted**
 
-> **Branch note:** Local/remote branch is named `SKSK-296`; Jira ticket is `SKSH-296`. Branch tip includes merged `SKSH-311` commits; audit-log scope is isolated to `9492bfec` (7 files).
+> **Branch note:** Local/remote branch is named `SKSK-296`; Jira ticket is `SKSH-296`. Audit-log core: `9492bfec`; bug-fix pass: `802fba45` (typed detail row, cache invalidation, `AuditLog` component).
+
+### Protected modules
+
+No changes to `pagination-bar.tsx`, `use-pagination.ts`, `use-server-table-controls.ts`, `table-sort.ts`, `antd.adapter.tsx`, or `destructive-action-confirm-modal.tsx`.
 
 ---
 
 ## GitHub comments (Open findings)
 
-### 1. `src/pages/management/skillshow-users/onboarding/components/team-user-audit-log.tsx` line 25
-
-**High:** Detail response is cast to a local `TeamUserDetailWithHistory` to read `history` because `getSkillshowUser` is still typed as `Promise<TeamUserRow>` — please add `TeamUserDetailRow` in feature/API types and remove this cast.
-
-### 2. `src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx` line 199
-
-**High:** This PR wires self-fetching `<TeamUserAuditLog />`, but `patchTeamUserMutation` `onSuccess` (lines 147-148) still only invalidates `TEAM_USERS_LIST_QUERY_KEY` — please also invalidate `["management", "team-users", "detail", userId]` (and consider a short delayed refetch) so the audit log picks up CDC-written history after edit.
-
-### 3. `src/components/audit-log/AuditLogTable.tsx` line 1
-
-**Medium:** New shared audit table lives at `audit-log/AuditLogTable.tsx` while the frozen contract documents `src/components/AuditLogTable.tsx` — align path before crew/app users migrate to the same component.
+None.
 
 ---
 
@@ -34,40 +29,23 @@
 Detail API response type omits `history`
 
 Risk Level: HIGH  
-File Path: src/pages/management/skillshow-users/onboarding/components/team-user-audit-log.tsx  
-Lines: 7-9, 25
+File Path: src/api/services/skillshowUserService.ts  
+Lines: 23-26
 
 Description:
-**Contract / DRY.** Backend `getSkillshowUser` now returns `SkillshowUserDetailRow` with `history: SkillshowUserHistoryEntryDto[]`. Frontend `getSkillshowUser` still returns `Promise<TeamUserRow>`, and `TeamUserAuditLog` casts with a local `TeamUserDetailWithHistory` type instead of a shared API type.
+**Contract / DRY.** Backend detail returns `history[]`. Initial PR cast around `TeamUserRow`; fix commit adds `TeamUserDetailRow` and types `getSkillshowUser` accordingly. `TeamUserAuditLog` reads `data?.history` without a cast.
 
 Impact:
-- TypeScript will not catch missing or mis-shaped `history` fields at compile time
-- Other consumers of `getSkillshowUser` won't know `history` exists without reading backend docs
+- TypeScript now enforces `history` on detail responses
 
 Recommendation:
-Add a typed detail row and use it in the service + feature types:
+N/A — implemented.
 
-```typescript
-export type TeamUserHistoryEntry = {
-  id: string;
-  createdAt: string;
-  actor: TeamUserActorRef;
-  description: string;
-};
+**Re-review (`802fba45`):** ✅ **Fixed** — `TeamUserDetailRow` in `dashboard/types.ts`; `getSkillshowUser` returns `Promise<TeamUserDetailRow>`; `team-user-audit-log.tsx` line 19 uses `data?.history ?? []`.
 
-export type TeamUserDetailRow = TeamUserRow & { history: TeamUserHistoryEntry[] };
+**PR comment:** Resolved on branch.
 
-export function getSkillshowUser(userId: string): Promise<TeamUserDetailRow> {
-  return apiClient.get<TeamUserDetailRow>({ ... });
-}
-```
-
-Remove the cast in `team-user-audit-log.tsx`.
-
-**PR comment (`team-user-audit-log.tsx` line 25):**  
-**High:** Detail response is cast to a local `TeamUserDetailWithHistory` to read `history` because `getSkillshowUser` is still typed as `Promise<TeamUserRow>` — please add `TeamUserDetailRow` in feature/API types and remove this cast.
-
-**Status:** Open
+**Status:** ✅ Fixed
 
 ---
 
@@ -76,74 +54,64 @@ Detail query cache not invalidated after team-user mutations
 
 Risk Level: HIGH  
 File Path: src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx  
-Lines: 147-148, 199
+Lines: 148-155
 
 Description:
-**Contract.** After a successful patch, `patchTeamUserMutation` invalidates only `TEAM_USERS_LIST_QUERY_KEY` and navigates to view. The detail query `["management", "team-users", "detail", userId]` used by `TeamUserOnboardingPage` and `TeamUserAuditLog` is left cached. Combined with backend async CDC (1s debounce), the audit table can show stale or missing entries immediately after save.
+**Contract.** `patchTeamUserMutation` now invalidates `teamUserDetailQueryKey(userId)` immediately and again after `AUDIT_LOG_REFETCH_DELAY_MS` (1500 ms) to account for backend CDC debounce. Shared `teamUserDetailQueryKey` is used in onboarding page and audit log.
 
 Impact:
-- User saves edits → view page may show old audit log from React Query cache
-- Even on refetch, history may not include the just-saved change until CDC flushes (~1s later) with no follow-up refetch
+- Audit log refreshes after save instead of serving stale React Query cache
+- Delayed second invalidation improves odds CDC history is persisted before refetch
 
 Recommendation:
-Invalidate detail on mutation success (and after resend-welcome / bulk flows if applicable):
+N/A — implemented.
 
-```typescript
-onSuccess: (_row, { userId }) => {
-  queryClient.invalidateQueries({ queryKey: TEAM_USERS_LIST_QUERY_KEY });
-  queryClient.invalidateQueries({ queryKey: ["management", "team-users", "detail", userId] });
-  navigateTeamUser(navigate, teamUserRoutes.view(userId));
-},
-```
+**Re-review (`802fba45`):** ✅ **Fixed** — lines 150-154 invalidate detail key + delayed refetch; `teamUserDetailQueryKey` centralized in `constants.ts`.
 
-Optionally `refetch` detail after a short delay or return appended history from PATCH for synchronous UI.
+**PR comment:** Resolved on branch.
 
-**PR comment (`team-user-form.tsx` line 199):**  
-**High:** This PR wires self-fetching `<TeamUserAuditLog />`, but `patchTeamUserMutation` `onSuccess` (lines 147-148) still only invalidates `TEAM_USERS_LIST_QUERY_KEY` — please also invalidate `["management", "team-users", "detail", userId]` (and consider a short delayed refetch) so the audit log picks up CDC-written history after edit.
-
-**Status:** Open
+**Status:** ✅ Fixed
 
 ---
 
 ---
-Shared AuditLogTable path does not match frozen module location
+Shared audit component path vs frozen module name
 
 Risk Level: MEDIUM  
-File Path: src/components/audit-log/AuditLogTable.tsx  
+File Path: src/components/AuditLog.tsx  
 Lines: 1
 
 Description:
-**Global consistency / Protected module.** Review contract lists `src/components/AuditLogTable.tsx` as the frozen shared audit table. This PR introduces `src/components/audit-log/AuditLogTable.tsx` instead. `crew-user-audit-log.tsx` still uses legacy `Descriptions` markup and will need migration later.
+**Global consistency / Protected module.** Review prompt documents `src/components/AuditLogTable.tsx`. Fix commit moved shared UI to `src/components/AuditLog.tsx` (renamed from `audit-log/AuditLogTable.tsx`).
 
 Impact:
-- Future crew/app-user audit migrations may import the wrong path or duplicate table markup
-- Drift from documented protected-module location
+- Shared component is at the correct top-level `src/components/` placement
+- Export name `AuditLog` vs prompt alias `AuditLogTable` is documentation-only drift
 
 Recommendation:
-Move/re-export from `src/components/AuditLogTable.tsx` (re-export from `audit-log/` if subfolder is preferred), or update the team standard before additional features adopt the component.
+Optional: add `AuditLogTable.tsx` re-export alias for prompt parity. Not required for merge.
 
-**PR comment (line 1):**  
-**Medium:** New shared audit table lives at `audit-log/AuditLogTable.tsx` while the frozen contract documents `src/components/AuditLogTable.tsx` — align path before crew/app users migrate to the same component.
+**Accepted (2026-06-08):** Team standardized on `src/components/AuditLog.tsx`; placement matches shared-component convention. Prompt frozen-path name can catch up separately.
 
-**Status:** Open
+**Status:** Accepted
 
 ---
 
 ## Additional notes (not blockers)
 
-- **`TeamUserAuditLog` shares queryKey with parent** (`["management", "team-users", "detail", userId]`) — React Query dedupes network calls; acceptable, though passing `history` from the parent would simplify the child.
-- **`AuditLogTable` is client-side only** (embedded `history[]` on detail) — no `useServerTableControls` required for this slice.
-- **Description rendering** aligns with backend `buildDescription` clause shapes (`set to`, `changed from`, `was cleared`).
-- **Legacy `modificationOn` / `modificationBy` removed** from types, constants, and form props — consistent with backend schema change.
+- **`TeamUserAuditLog` shares `teamUserDetailQueryKey` with parent** — React Query dedupes network calls; acceptable.
+- **`AuditLog` is client-side only** (embedded `history[]` on detail) — no `useServerTableControls` required.
+- **Description rendering** aligns with backend `buildDescription` clause shapes.
+- **Legacy `modificationOn` / `modificationBy` removed** from types, constants, and form props.
 
 ---
 
 ## Positive notes
 
 - Replaces static created/modified `Descriptions` with a proper event timeline.
-- `AuditLogTable` provides responsive mobile cards + desktop `Table` with shared formatting.
+- `AuditLog` provides responsive mobile cards + desktop `Table` with shared formatting.
 - `hideWhenEmpty` avoids empty audit cards on new users.
-- Form simplification — audit section self-loads in view mode via `routeUserId`.
+- Typed detail contract + CDC-aware cache invalidation close the main frontend gaps.
 
 ---
 
@@ -151,8 +119,8 @@ Move/re-export from `src/components/AuditLogTable.tsx` (re-export from `audit-lo
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Detail API response type omits `history` | HIGH | Open | src/pages/management/skillshow-users/onboarding/components/team-user-audit-log.tsx | 7-9, 25 |
-| 2 | Detail query cache not invalidated after team-user mutations | HIGH | Open | src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx | 147-148, 199 |
-| 3 | Shared AuditLogTable path does not match frozen module location | MEDIUM | Open | src/components/audit-log/AuditLogTable.tsx | 1 |
+| 1 | Detail API response type omits `history` | HIGH | ✅ Fixed | src/api/services/skillshowUserService.ts | 23-26 |
+| 2 | Detail query cache not invalidated after team-user mutations | HIGH | ✅ Fixed | src/pages/management/skillshow-users/onboarding/components/team-user-form.tsx | 148-155 |
+| 3 | Shared audit component path vs frozen module name | MEDIUM | Accepted | src/components/AuditLog.tsx | 1 |
 
-**Merge readiness:** **Not merge-ready** — 2 High Open findings (type contract + stale audit cache after save); address alongside backend CDC timing. Medium path alignment recommended before wider audit-log rollout.
+**Merge readiness:** **Merge-ready (frontend)** — no open High/Medium blockers. Backend also clear — all findings Fixed or Accepted (see [backend.md](./backend.md)).
