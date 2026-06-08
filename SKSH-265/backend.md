@@ -3,12 +3,17 @@
 **Repo:** skillshow (main API)  
 **Branch:** `SKSH-265`  
 **Base:** `main...HEAD`  
-**Scope:** Crew edit-request flow — editor feedback, assignment returns, crew dashboard, admin insights, internal revision, unread/read lanes (Critical & High only)  
-**Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract enforced)
+**Re-verified:** 2026-06-08 @ `e5b1164`  
+**Scope:** Crew edit-request flow — feedback, assignment returns, crew dashboard, admin insights, internal revision, unread/read lanes (Critical & High only)  
+**Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
 **Findings:** 5 (0 Critical, 5 High) — **4 Open**, **1 Accepted**
 
-> **Scope note:** Pagination / list-search performance findings are omitted per review request.
+> **Scope note:** Pagination / list-search performance findings (insights search `$in` resolution, unbounded export fetches, etc.) are omitted per review request.
+
+### Protected modules
+
+No changes in this PR to `list-query.validation.ts`, `list-query-aggregation.utils.ts`, `list-row-repository.utils.ts`, `mongo-change-stream.service.ts`, `audit-log.utils.ts`, or `change-stream.utils.ts`.
 
 ---
 
@@ -18,17 +23,17 @@
 
 **High:** `submitEditorFeedback` always inserts a new row with no idempotency check — please reject or upsert when `findLatestForEditRequestByRaisedBy` already exists so repeat POSTs cannot skew crew KPI averages and insights.
 
-### 2. `src/controllers/edit-request.controller.ts` lines 370, 380
+### 2. `src/controllers/edit-request.controller.ts` line 370
 
-**High:** Insights list routes validate query with Joi but pass raw `req.query` into services — please read `req.validatedQuery` (as in `app-user.controller.ts`) so coerced `page`/`limit`/`module` match the validated contract.
+**High:** Insights list routes validate query with Joi but pass raw `req.query` into services — please read `req.validatedQuery` so coerced `page`/`limit`/`module` match the validated contract (same for `getCrewDashboard` at line 142).
 
 ### 3. `src/services/edit-request-read.service.ts` line 64
 
-**High:** Unread summary and `markInsightRead` call `EditRequestAssignmentReturnModel` / `EditRequestFeedbackModel` directly — please move count/update paths into the existing assignment-return and feedback repositories so Mongoose access stays in the data layer.
+**High:** Unread summary and `markInsightRead` call Mongoose models directly — please move count/update paths into the assignment-return and feedback repositories.
 
 ### 4. `src/services/edit-request-read.service.ts` line 174
 
-**High:** `notifyAdminQueueForEditRequest` writes one `bumpEditRequestUserRead` per admin user on every queue event — please batch or fan-in (single aggregate unread lane) so high admin counts do not multiply DB writes per edit-request update.
+**High:** `notifyAdminQueueForEditRequest` writes one `bumpEditRequestUserRead` per admin on every queue event — please batch or fan-in so admin count does not multiply DB writes per edit-request update.
 
 ---
 
@@ -44,11 +49,9 @@ Description:
 
 Impact:
 - Duplicate ratings inflate crew dashboard `averageRating` and admin list `latestEditorRating`
-- Insights Feedback tab shows multiple rows for one request; athlete UI can look submitted while API still accepts more ratings
+- Insights Feedback tab shows multiple rows for one request
 
 Recommendation:
-Reject a second submission for the same actor/request (`INVALID_TRANSITION` or 409), or upsert the existing row:
-
 ```typescript
 const existing = await editRequestFeedbackRepository.findLatestForEditRequestByRaisedBy(
   editRequestId,
@@ -66,27 +69,24 @@ if (existing) throw new Error("INVALID_TRANSITION:editor_feedback:already_submit
 ---
 
 ---
-New insights list handlers bypass `validatedQuery`
+New list handlers bypass `validatedQuery`
 
 Risk Level: HIGH  
 File Path: src/controllers/edit-request.controller.ts  
-Lines: 365-381
+Lines: 137-143, 365-381
 
 Description:
-**Contract.** `GET /admin/assignment-returns` and `GET /admin/feedbacks` wire `validate(adminEditRequestInsightsListQuerySchema, "query")`, but `listAdminAssignmentReturns` / `listAdminFeedbacks` pass `req.query` into `editRequestInsightsService`. Joi coerced values live on `req.validatedQuery` only (`validate.middleware.ts`); raw `req.query` is not replaced.
+**Contract.** Routes wire `validate(..., "query")` for crew dashboard and insights lists, but handlers pass `req.query` into services. Joi coerced values live on `req.validatedQuery` only (`validate.middleware.ts`); raw `req.query` is not replaced. New endpoints in this PR (`getCrewDashboard`, `listAdminAssignmentReturns`, `listAdminFeedbacks`) follow the same anti-pattern.
 
 Impact:
-- Typed/coerced list params may diverge from validated values; inconsistent with established controllers (`app-user.controller.ts`, `event.controller.ts`)
-- Harder to rely on Joi defaults and `stripUnknown` at the service boundary
+- Typed/coerced list params may diverge from validated values; inconsistent with `app-user.controller.ts` / `event.controller.ts`
+- `stripUnknown` on validated query does not apply at the service boundary
 
 Recommendation:
 ```typescript
 const query = (req as ValidatedQueryRequest).validatedQuery ?? req.query;
-// ...
 () => editRequestInsightsService.listAssignmentReturns(actorId, query),
 ```
-
-Apply the same pattern to `getCrewDashboard` (line 142) and other query-validated routes touched in this PR when refactored.
 
 **PR comment (line 370):**  
 **High:** Insights list routes validate query with Joi but pass raw `req.query` into services — please read `req.validatedQuery` so coerced `page`/`limit`/`module` match the validated contract.
@@ -103,17 +103,17 @@ File Path: src/services/edit-request-read.service.ts
 Lines: 63-129
 
 Description:
-**Layer separation / DRY.** New `EditRequestReadService` calls `EditRequestAssignmentReturnModel` and `EditRequestFeedbackModel` directly for `countDocuments` (unread summary) and `updateOne` / `$push` (mark insight read). Repositories `edit-request-assignment-return.repository.ts` and `edit-request-feedback.repository.ts` already exist for these entities but lack read/unread helpers — logic is duplicated at the service layer instead.
+**Layer separation / DRY.** `EditRequestReadService` calls `EditRequestAssignmentReturnModel` and `EditRequestFeedbackModel` directly for `countDocuments` (unread summary) and `updateOne` / `$push` (`markInsightRead`). Repositories for these entities exist but lack read/unread helpers — Mongoose access is duplicated in the service layer.
 
 Impact:
-- Mongoose query shape for `readBy` arrays lives in the service; harder to reuse or test consistently with list pagination repos
-- Future index/query changes require edits outside the repository layer
+- `readBy` query logic is harder to reuse with list pagination repos
+- Index/query changes require service edits instead of repository-only updates
 
 Recommendation:
-Add `countUnreadForUser`, `markReadByUser` (or similar) to the assignment-return and feedback repositories; call those from `getUnreadSummary` and `markInsightRead`.
+Add `countUnreadForUser` / `markReadByUser` to `edit-request-assignment-return.repository.ts` and `edit-request-feedback.repository.ts`; call from `getUnreadSummary` and `markInsightRead`.
 
 **PR comment (line 64):**  
-**High:** Unread summary and `markInsightRead` call models directly — please move count/update paths into the existing repositories so Mongoose access stays in the data layer.
+**High:** Unread summary and `markInsightRead` call models directly — please move count/update paths into the existing repositories.
 
 **Status:** Open
 
@@ -127,14 +127,14 @@ File Path: src/services/edit-request-read.service.ts
 Lines: 166-183
 
 Description:
-**Performance.** `notifyAdminQueueForEditRequest` loads every active user with edit-request read permission, then `Promise.all`s `bumpEditRequestUserRead` for each admin on every queue event (also invoked from `edit-request.utils.ts` notification paths).
+**Performance.** `notifyAdminQueueForEditRequest` loads every active user with edit-request read permission, then `Promise.all`s `bumpEditRequestUserRead` per admin. Invoked from notification paths in `edit-request.utils.ts` on lifecycle events.
 
 Impact:
-- Each edit-request lifecycle event triggers O(admins) DB writes; latency and load grow with admin roster size
-- Bursty traffic (bulk status changes, socket-driven refreshes) amplifies write volume
+- O(admins) DB writes per edit-request event; latency grows with admin roster
+- Bursty updates amplify write load
 
 Recommendation:
-Batch upsert via repository helper (e.g. `bulkBumpUserReadForLane`), defer to a job queue, or maintain a single shared admin-queue counter keyed by `editRequestId` instead of per-admin documents when all admins share the same indicator semantics.
+Batch upsert via a repository helper, defer to a job, or use a shared admin-queue counter when all admins share the same indicator semantics.
 
 **PR comment (line 174):**  
 **High:** `notifyAdminQueueForEditRequest` writes once per admin on every queue event — please batch or fan-in so admin count does not multiply DB writes per edit-request update.
@@ -151,19 +151,9 @@ Risk Level: HIGH
 File Path: src/scripts/migrate-edit-request-editor-feedback.ts  
 Lines: 1-105
 
-**Accepted:** Manual one-time migration is intentional; team will run `pnpm exec tsx src/scripts/migrate-edit-request-editor-feedback.ts` in staging/prod as part of release (not wired into deploy startup).
+**Accepted:** Manual one-time migration is intentional; team will run `pnpm exec tsx src/scripts/migrate-edit-request-editor-feedback.ts` in staging/prod as part of release.
 
-Description:
-Feedback now lives in `EditRequestFeedback`; participant responses expose `latestFeedback` / `myLatestFeedback` from that collection. The migration script copies legacy `editorRating` / `editorFeedback` / `editorFeedbackAt` from existing MongoDB documents and unsets those fields.
-
-Impact:
-- Production requests with legacy fields only will show no athlete/editor rating after deploy until migration runs
-
-Recommendation:
-Run the script in each environment as part of release checklist; verify migrated vs skipped counts in staging.
-
-**PR comment (line 5):**  
-Accepted — manual migration at release is acknowledged.
+**PR comment (line 5):** Accepted — manual migration at release is acknowledged.
 
 ---
 
@@ -172,16 +162,16 @@ Accepted — manual migration at release is acknowledged.
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 | 1 | Editor feedback endpoint allows duplicate submissions | HIGH | Open | src/services/edit-request.service.ts | 1851-1893 |
-| 2 | New insights list handlers bypass `validatedQuery` | HIGH | Open | src/controllers/edit-request.controller.ts | 365-381 |
+| 2 | New list handlers bypass `validatedQuery` | HIGH | Open | src/controllers/edit-request.controller.ts | 137-143, 365-381 |
 | 3 | Read service bypasses repositories for insight read/unread | HIGH | Open | src/services/edit-request-read.service.ts | 63-129 |
 | 4 | Admin-queue unread notify scales with admin user count | HIGH | Open | src/services/edit-request-read.service.ts | 166-183 |
 | 5 | Legacy editor rating requires one-time migration before release | HIGH | Accepted | src/scripts/migrate-edit-request-editor-feedback.ts | 1-105 |
 
 ## Positive notes
 
-- Layering for insights, crew dashboard, and read/unread is clear; routes use Joi + RBAC; crew return and internal-revision paths enforce assignment/manager checks.
-- Batch `findLatestRatingByEditRequestIds` avoids N+1 on admin lists; unread summary uses dedicated read service + repository.
-- **Protected modules:** No changes to `list-query.validation.ts`, `list-query-aggregation.utils.ts`, or `list-row-repository.utils.ts`.
-- **DRY (good):** Centralized notification workflow via `notifyEditRequestWorkflowEvent`; shared read/unread utils (`edit-request-user-read.utils.ts`).
+- Layering for insights, crew dashboard, and read/unread is clear; routes use Joi + RBAC; crew return and internal-revision enforce assignment/manager checks.
+- Batch `findLatestRatingByEditRequestIds` avoids N+1 on admin lists; `notifyEditRequestWorkflowEvent` centralizes notification fan-out.
+- **DRY (good):** Shared read/unread utils (`edit-request-user-read.utils.ts`); internal-revision review now requires explicit `outputId`/`versionId` in validation.
+- **Protected modules:** None modified in this PR.
 
-**Merge readiness:** **Not merge-ready** — 4 open High blockers (duplicate editor feedback, `validatedQuery`, read-service layer bypass, admin-queue N× writes). Migration item Accepted.
+**Merge readiness:** **Not merge-ready** — 4 open High blockers. Migration Accepted.
