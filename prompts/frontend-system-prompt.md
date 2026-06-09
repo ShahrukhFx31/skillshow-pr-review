@@ -58,7 +58,12 @@ The following shared modules are **frozen**. Do **not** recommend edits to them.
 | `src/hooks/use-server-table-controls.ts` | Search debounce, sort, pagination wiring for server list pages |
 | `src/utils/table-sort.ts` | Ant `onChange` sorter → `setSort(sortBy, sortOrder)` (`asc`/`desc`) |
 | `src/theme/adapter/antd.adapter.tsx` | Global Ant Design theme tokens and component overrides |
-| `src/components/AuditLogTable.tsx` | Shared audit-log table (columns, formatting, pagination wiring) |
+| `src/components/audit-log/audit-log-description.tsx` | Renders field-change lines (`created`, set/cleared/updated copy) |
+| `src/components/audit-log/entity-audit-log-card.tsx` | `useQuery` + `EntityAuditLogCard` wrapper (`listAuditLogs`, `queryKey`, `fieldLabels`) |
+| `src/components/audit-log/user-audit-log-panel.tsx` | Audit log card + table/descriptions layout (date, actor, description) |
+| `src/components/table-empty-state.tsx` | Shared Ant `Empty` wrapper for table `locale.emptyText` |
+| `src/constants/audit-log.constants.ts` | `AUDIT_LOG_CREATED_FIELD`, `AUDIT_LOG_SCROLL_HEIGHT` |
+| `src/utils/audit-log.utils.ts` | `formatAuditDisplayValue`, `buildAuditFieldLabelMap`, `isEmptyAuditValue` |
 
 **If the PR diff modifies any protected file:** report **CRITICAL** — *Protected module changed*. Note the file path; recommend reverting the change or moving the work to a dedicated ticket scoped to that shared module. Mark **Accepted** only when the ticket explicitly authorizes changing that module.
 
@@ -90,10 +95,13 @@ When the PR adds or changes **server-driven list pages**, **table sort/paginatio
 
 ### Audit log UI
 
-1. **Shared table** — Audit-log lists render via `AuditLogTable` (props for rows, loading, pagination/sort when server-driven). Do not duplicate audit-log column defs, date/actor formatting, or table markup in feature pages.
-2. **Server lists** — When audit logs are paginated server-side, parent page uses `useServerTableControls` + passes `page`/`pageSize`/`setSort` into `AuditLogTable` (or equivalent props contract). `queryKey` must include all list inputs.
-3. **Read-only** — Audit tables are display-only; mutations belong in the feature action flow, not inside `AuditLogTable`.
-4. Flag **HIGH** for new per-feature audit `Table` implementations that copy `AuditLogTable` layout instead of composing it.
+1. **Composition pattern** — Feature pages expose a thin wrapper (e.g. `app-user-audit-log.tsx`) that renders `EntityAuditLogCard` with `entityId`, `fieldLabels`, `listAuditLogs`, and `queryKey`. Do not duplicate fetch + table markup in feature components.
+2. **Field labels** — `fieldLabels` map audited field keys to display labels (from feature form config or `buildAuditFieldLabelMap`). Must align with backend audited field names.
+3. **Display stack** — `EntityAuditLogCard` → `UserAuditLogPanel` → `AuditLogDescription`. Do not reimplement change-line copy (“set to”, “cleared”, created message) or date/actor columns elsewhere.
+4. **Constants & formatting** — Use `AUDIT_LOG_CREATED_FIELD` from `audit-log.constants.ts` and `formatAuditDisplayValue` / `isEmptyAuditValue` from `audit-log.utils.ts` for value display; do not fork status/empty formatting.
+5. **Read-only** — Audit UI is display-only; mutations belong in the feature save flow, not inside audit-log components.
+6. **Table empty state** — Server-driven tables use `TableEmptyState` (or `TABLE_EMPTY_DESCRIPTION`) for `locale.emptyText`; do not duplicate `Empty` markup in feature tables.
+7. Flag **HIGH** for per-feature audit `Table`/`Card` implementations that copy `UserAuditLogPanel` layout instead of composing `EntityAuditLogCard`.
 
 ### When to report (protected / contract)
 
@@ -105,10 +113,13 @@ When the PR adds or changes **server-driven list pages**, **table sort/paginatio
 | UI filter/status values sent to API without mapping to backend allow-list | **HIGH** |
 | New ad-hoc destructive confirm instead of `DestructiveActionConfirmModal` | **HIGH** |
 | `pageSize` or defaults out of sync with backend list bounds | **HIGH** |
-| Audit-log UI bypasses `AuditLogTable` with duplicate table/column markup | **HIGH** |
-| Server-driven audit list missing `useServerTableControls` / pagination contract | **HIGH** |
+| Audit-log UI bypasses `EntityAuditLogCard` / `UserAuditLogPanel` with duplicate table markup | **HIGH** |
+| Per-feature audit fetch/table instead of `EntityAuditLogCard` + `listAuditLogs` / `queryKey` contract | **HIGH** |
+| `fieldLabels` keys mismatch backend audited field names | **HIGH** |
+| Duplicate audit change-line copy instead of `AuditLogDescription` | **HIGH** |
+| Table empty UI bypasses `TableEmptyState` with ad-hoc `Empty` markup | **HIGH** (when pattern exists on sibling tables in the same PR) |
 
-Tag **Protected module** and/or **Contract** in Description. When the ticket includes a backend review, cross-check `pr-review/{TICKET}/backend.md` for list-query / sort / pagination / audit-log alignment.
+Tag **Protected module** and/or **Contract** in Description. When the ticket includes a backend review, cross-check `pr-review/{TICKET}/backend.md` for audit-log write/read alignment and list-query / sort / pagination where applicable.
 
 ## Focus on
 

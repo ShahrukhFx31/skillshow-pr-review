@@ -56,8 +56,12 @@ The following shared modules are **frozen**. Do **not** recommend edits to them.
 | `src/utils/list-query-aggregation.utils.ts` | `runPaginatedAggregate`, `runListQueryAggregate`, `listSortSpec`, `buildUserDocListMatch`, `buildRegexOrMatch`, pagination/sort helpers |
 | `src/utils/list-row-repository.utils.ts` | `orderListRowsByKeys`, `runUpdateManyByUserIds`, `runUpdateManyByPartnerIds`, `runTouchModificationByUserIds` |
 | `src/services/mongo-change-stream.service.ts` | MongoDB change-stream lifecycle (watch, resume, reconnect, shutdown) |
-| `src/utils/audit-log.utils.ts` | Audit-log document shape, diff/redaction, persistence helpers |
 | `src/utils/change-stream.utils.ts` | Change-stream event parsing, namespace/operation filtering, resume tokens |
+| `src/models/audit-log.model.ts` | `AuditLog` Mongoose schema (entity ref, field changes, actor) |
+| `src/repositories/audit-log.repository.ts` | `create`, `listByEntity` aggregation (actor lookup, sort, limit) |
+| `src/services/audit-log.service.ts` | `recordChanges`, `recordCreated`, `recordFormUpdateIfChanged`, `listEntityAuditLogs` |
+| `src/utils/audit-log.utils.ts` | Snapshot diff (`diffAuditSnapshots`), `pickAuditSnapshot`, `normalizeAuditValue`, redaction |
+| `src/utils/audit-log-reporting-manager.utils.ts` | Reporting-manager ID collection and audit snapshot label resolution |
 
 **If the PR diff modifies any protected file:** report **CRITICAL** — *Protected module changed*. Note the file path; recommend reverting the change or moving the work to a dedicated ticket scoped to that shared module. Mark **Accepted** only when the ticket explicitly authorizes changing that module.
 
@@ -92,10 +96,12 @@ When the PR adds or changes **admin list endpoints**, **aggregation list queries
 
 1. **Change-stream entry point** — MongoDB `watch` / resume / reconnect logic lives in `mongo-change-stream.service.ts` only. Feature code registers handlers; do not open ad-hoc `collection.watch()` in services, repositories, or `index.ts`.
 2. **Event parsing** — Use `change-stream.utils.ts` for operation type, namespace, document key, and resume-token handling. Flag **HIGH** for inline change-event parsing duplicated across handlers.
-3. **Audit persistence** — Audit rows are built and written through `audit-log.utils.ts` (diff, actor, entity ref, redaction). Do not hand-roll audit document shapes or field-level diff logic in domain services.
-4. **List API** — Audit-log list endpoints follow the same `createListQuerySchema` + `validatedQuery` contract as other admin lists; repositories may use `runListQueryAggregate` when appropriate.
-5. **Idempotency & ordering** — Handlers must tolerate duplicate/replayed change events; do not assume exactly-once delivery without the service’s dedup/resume contract.
-6. Flag **CRITICAL** for new change streams that bypass redaction/sensitive-field rules centralized in `audit-log.utils.ts`.
+3. **Write path** — Domain `*-audit.service.ts` files call `auditLogService.recordCreated` / `recordFormUpdateIfChanged` / `recordChanges`. Snapshots and diffs use `audit-log.utils.ts` (`pickAuditSnapshot`, `diffAuditSnapshots`, `normalizeAuditValue`). Do not write to `AuditLogModel` or `auditLogRepository` directly from feature services.
+4. **Reporting manager** — Entities with `reportingManager` audit fields use `audit-log-reporting-manager.utils.ts` (`buildReportingManagerAuditSnapshotPair`, `resolveReportingManagerNameMap`) instead of inline ID→name resolution in domain services.
+5. **Read path** — Entity audit lists go through `auditLogService.listEntityAuditLogs` → `auditLogRepository.listByEntity`. Controllers expose thin list handlers; do not duplicate aggregation pipelines.
+6. **Per-entity config** — `entityType`, audited field lists, and created messages live in entity `constants/` (e.g. `APP_USER_AUDIT_FIELDS`); not inlined in `audit-log.service.ts` or the model.
+7. **Idempotency & ordering** — Change-stream handlers must tolerate duplicate/replayed events; do not assume exactly-once delivery without the service’s dedup/resume contract.
+8. Flag **CRITICAL** for audit writes that bypass `audit-log.utils.ts` redaction/normalization or write directly to the model/repository.
 
 ### When to report (protected / contract)
 
@@ -109,11 +115,13 @@ When the PR adds or changes **admin list endpoints**, **aggregation list queries
 | Inline `updateMany` duplicating `list-row-repository.utils` patterns | **HIGH** |
 | Missing `escapeRegex` / soft-delete / user-doc match on list queries | **HIGH** |
 | Ad-hoc `collection.watch()` or change-handler logic outside `mongo-change-stream.service.ts` | **HIGH** or **CRITICAL** |
-| Inline audit-log diff/write logic instead of `audit-log.utils.ts` | **HIGH** |
+| Direct `AuditLogModel` / `auditLogRepository` access from feature services (bypass `audit-log.service.ts`) | **HIGH** |
+| Inline audit snapshot diff instead of `audit-log.utils.ts` | **HIGH** |
+| Inline reporting-manager audit resolution instead of `audit-log-reporting-manager.utils.ts` | **HIGH** |
 | Duplicate change-event parsing instead of `change-stream.utils.ts` | **HIGH** |
-| Audit-log list endpoint bypasses `createListQuerySchema` / `validatedQuery` | **HIGH** |
+| Duplicate `listByEntity` aggregation instead of `audit-log.repository.ts` | **HIGH** |
 
-Tag **Protected module** and/or **Contract** in Description. When the ticket includes a frontend review, cross-check `pr-review/{TICKET}/frontend.md` for list-control / sort / pagination / `AuditLogTable` alignment.
+Tag **Protected module** and/or **Contract** in Description. When the ticket includes a frontend review, cross-check `pr-review/{TICKET}/frontend.md` for list-control / sort / pagination / audit-log UI alignment.
 
 ## Focus on
 
