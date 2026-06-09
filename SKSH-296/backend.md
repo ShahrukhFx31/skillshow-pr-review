@@ -1,177 +1,159 @@
 # Backend PR Review — skillshow (`SKSH-296`)
 
 **Repo:** skillshow (main API)  
-**Branch:** `SKSK-296` (remote/local; ticket id `SKSH-296`)  
-**Base:** `main...HEAD`  
-**Re-verified:** 2026-06-08 @ `42adbc7`  
-**Scope:** SkillShow user audit history — embedded `history[]`, MongoDB change streams, CDC watcher, detail API enrichment (Critical & High only)  
-**Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract enforced)
+**Branch:** `SKSH-296-1`  
+**Base:** `main...HEAD` @ `c4b7573`  
+**Initial review:** 2026-06-09  
+**Scope:** Centralized audit logging for app-user, crew-user, skillshow-user, and partner create/update/bulk flows; entity-scoped audit-log list APIs; removal of `modificationOn` / `modificationBy` from crew/skillshow models and list projections (Critical & High only)  
+**Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
-**Aligned with:** [frontend.md](./frontend.md)
-
-**Findings:** 5 (0 Critical, 0 High open) — **3 Fixed**, **2 Accepted**
-
-> **Branch note:** Local/remote branch is named `SKSK-296`; Jira ticket is `SKSH-296`. Audit-log core: `da2fcc6`; bug-fix pass: `42adbc7` (leader gating, Redis actors, stream lifecycle).
+**Findings:** 4 (0 Critical, 4 High) — **4 Accepted**
 
 ### Protected modules
 
-This PR **introduces** `mongo-change-stream.service.ts`, `audit-log.utils.ts`, and `change-stream.utils.ts` (new on `main`). **Accepted** for ticket scope — future consumers must integrate via these modules.
+| Module | Status |
+|--------|--------|
+| `src/utils/audit-log.utils.ts` | **Introduced in this PR** — in scope for SKSH-296 (audit-log ticket). **Accepted** as intentional establishment of the frozen module. |
+| `list-query.validation.ts`, `list-query-aggregation.utils.ts`, `list-row-repository.utils.ts`, `mongo-change-stream.service.ts`, `change-stream.utils.ts` | **Not modified** |
+
+Entity-scoped `GET /:id/audit-logs` endpoints return a fixed newest-100 slice (`AUDIT_LOG_LIST_LIMIT`) without `createListQuerySchema` pagination — **Accepted** for embedded detail-panel UX; not a global admin audit table.
 
 ---
 
----
+## GitHub comments (Open findings)
+
+*None — all backend findings Accepted.*
 
 ---
-Change streams gated to leader replica
 
-Risk Level: CRITICAL  
-File Path: src/services/change-stream.bootstrap.ts  
-Lines: 7-20
+## Findings
+
+---
+Delete operations do not write audit entries
+
+Risk Level: HIGH
+File Path: src/services/crew-user.service.ts
+Lines: 249-255
 
 Description:
-**Contract / reliability.** `startChangeStreamConsumersIfLeader()` skips registration unless `CHANGE_STREAM_ENABLED` and `CHANGE_STREAM_LEADER` are true. `app.ts` calls this instead of unconditionally starting watchers; shutdown invokes `stopChangeStreamConsumers()` → `mongoChangeStreamService.shutdown()`.
+**Contract / completeness.** All four domain services now record create, form update, and bulk update events through `*-audit.service` → `auditLogService`, but none of the delete paths (`deleteCrewUser`, `deleteSkillshowUser`, `deleteAppUser`, `deletePartner`) append an audit row. Soft-delete is a primary admin action that compliance users expect in an audit trail.
 
 Impact:
-- Multi-replica duplicate `history` rows avoided when ops sets `CHANGE_STREAM_LEADER=false` on non-leader replicas
+- Deleted users/partners leave no centralized audit record of who performed the deletion or when.
+- Audit panel on view pages cannot show delete history; operators must infer from absence of the entity.
 
 Recommendation:
-N/A — implemented. Document deploy requirement: exactly one replica with `CHANGE_STREAM_LEADER=true`.
+Add `auditLogService.recordCreated` (or a dedicated `recordDeleted` with message `"User deleted"` / `"Partner deleted"`) in each delete service method while `actorUserId` is available from the controller:
 
-**Re-review (`42adbc7`):** ✅ **Fixed** — `change-stream.bootstrap.ts` lines 7-20; `app.ts` line 174 (`startChangeStreamConsumersIfLeader`), line 200 (`stopChangeStreamConsumers`).
+```typescript
+await crewUserAuditService.recordDeleted({
+  entityId: seqParam,
+  subjectUserId: user._id,
+  updatedBy: actorUserId,
+});
+```
 
-**PR comment:** Resolved on branch.
+Wire `recordDeleted` once in `AuditLogService` and delegate from each `*-audit.service`.
 
-**Status:** ✅ Fixed
+**PR comment (line 249):** **High:** `deleteCrewUser` (and sibling delete methods on app-user, skillshow-user, partner) soft-delete without an audit entry. Create/update/bulk are covered — please add a delete audit marker on all four delete flows while `actorUserId` is still available from the controller.
 
+**Status:** Accepted — deferred out of SKSH-296 scope; delete audit entries to be addressed in a follow-up ticket.
 ---
 
 ---
-Change stream service resume, reconnect, and shutdown
+Audit persistence runs after DB commit without transaction
 
-Risk Level: HIGH  
-File Path: src/services/mongo-change-stream.service.ts  
-Lines: 47-130
+Risk Level: HIGH
+File Path: src/services/crew-user.service.ts
+Lines: 184-196
 
 Description:
-**Protected module / Contract.** Service now stores `resumeToken`, reconnects with exponential backoff on `close`, and exposes `shutdown()` that clears timers and closes streams.
+**Reliability / Contract.** Patch flows persist entity changes (`user.save()`, `crewUser.save()`, repository `updateByPartnerId`, etc.) and only then `await` audit recording. There is no Mongo transaction or outbox. If `auditLogRepository.create` throws, the handler surfaces 500 to the client while the mutation is already committed.
 
 Impact:
-- Transient stream errors no longer permanently stop audit capture until process restart
-- Graceful deploy closes change-stream cursors
+- Data changed but no audit row — exactly the gap this ticket is meant to close.
+- Client may retry; second attempt may diff identical snapshots and skip audit (`changes.length === 0`), worsening the gap.
 
 Recommendation:
-N/A — implemented.
+Use a Mongo session/transaction wrapping the domain update and `auditLogRepository.create`, or move audit writes to a durable async path with retry (change-stream handler is out of scope here). At minimum, log and alert on audit write failure without falsely implying the whole operation failed if business data already saved.
 
-**Re-review (`42adbc7`):** ✅ **Fixed** — `resumeAfter` at lines 79-81; `shutdown` 47-68; reconnect 97-130.
+**PR comment (line 190):** **High:** Audit rows are written after `user.save()` / `crewUser.save()` with no transaction. If `auditLogRepository.create` fails, the API returns 500 but the profile change is already persisted. Consider a Mongo transaction or durable retry so updates and audit trails stay consistent.
 
-**PR comment:** Resolved on branch.
-
-**Status:** ✅ Fixed
-
+**Status:** Accepted — intentional for v1; post-commit audit writes accepted without Mongo transaction/outbox in this ticket.
 ---
 
 ---
-User collection watcher processes all user updates
+Duplicate reporting-manager snapshot logic across crew and skillshow audit services
 
-Risk Level: HIGH  
-File Path: src/services/skillshow-user-history.watcher.ts  
-Lines: 99-103, 173-184
+Risk Level: HIGH
+File Path: src/services/crew-user-audit.service.ts
+Lines: 99-152
 
 Description:
-**Performance.** `registerSkillshowUserWatchers` still registers a change stream on the entire `User` model with no pipeline filter. `handleUserChange` runs on every user update, then executes `findByUserIdIncludingDeleted` to see if the user is a SkillShow team member.
+**DRY.** `crew-user-audit.service.ts` and `skillshow-user-audit.service.ts` are ~90% identical: `buildSnapshotPair`, `applyReportingManagerNames`, `collectReportingManagerIds`, and `resolveReportingManagerNameMap` differ only in the manager ID format (ObjectId string vs user seq) and the repository lookup (`findDisplayNameMapByIds` vs `findDisplayNameMapBySeqs`).
 
 Impact:
-- Write amplification scales with total platform user activity, not team-user activity
-- Extra load on `skillshowusers` collection for unrelated user mutations
+- Future field-label or manager-resolution fixes must be applied twice and will drift.
+- Increases review and test surface for every audit enhancement.
 
 Recommendation:
-Add a `$match` pipeline stage where possible, or stop watching `User` and append user-field changes synchronously in `skillshow-user.service` (actor context already exists).
+Extract shared helpers under `src/utils/audit-log.utils.ts` (consumer-only additions) or a small `reporting-manager-audit.utils.ts`:
 
-**PR comment (`skillshow-user-history.watcher.ts` line 100):** Accepted — full-`User` stream + post-filter is intentional for v1; optimize in a follow-up if write volume warrants it.
+```typescript
+export async function buildManagerLabeledSnapshots(
+  oldRow: Record<string, unknown> | undefined,
+  newRow: Record<string, unknown>,
+  fields: readonly string[],
+  managerField: string,
+  resolveNameMap: (rows: Record<string, unknown>[]) => Promise<Map<string, string>>,
+): Promise<[Record<string, string | null>, Record<string, string | null>]> { /* ... */ }
+```
 
-**Status:** Accepted
+Keep entity-specific audit services thin: constants + `recordCreated` / `list` / field lists only.
 
-**Accepted:** Team accepts the tradeoff: watcher listens to all `users` updates and filters to SkillShow team members in-process. Acceptable for initial rollout; revisit with pipeline narrowing or synchronous service writes if load becomes an issue.
+**PR comment (line 99):** **High (DRY):** `CrewUserAuditService` and `SkillshowUserAuditService` duplicate the reporting-manager snapshot pipeline (`buildSnapshotPair`, name-map resolution). Extract a shared helper parameterized by field name + resolver (`findDisplayNameMapByIds` vs `findDisplayNameMapBySeqs`) so the two services don't drift.
 
+**Status:** Accepted — duplication accepted for v1; shared extraction deferred to a follow-up refactor.
 ---
 
 ---
-CDC audit rows never capture prior field values
+App-user still uses embedded modification metadata; crew/skillshow migrated in same PR
 
-Risk Level: HIGH  
-File Path: src/utils/change-stream.utils.ts  
-Lines: 68-86
+Risk Level: HIGH
+File Path: src/services/app-user.service.ts
+Lines: 367-368, 400-401, 454-456, 502-505, 525-528
 
 Description:
-**Contract / data accuracy.** `mapCdcFieldChange` and `handleUserChange` (`isActive`, `roles` at watcher lines 210-224) always set `oldValue: null`. `buildDescription` supports `changed from … to …`, but persisted rows only produce `set to` or `was cleared` wording on edits.
+**Global consistency.** Crew and skillshow users drop `modificationOn` / `modificationBy` from models, repositories, and list projections and rely solely on the new `AuditLog` collection. App-user continues to write `modificationOn` / `modificationBy` on patch, bulk, and delete while also calling `appUserAuditService` — mixed old/new patterns within one PR across sibling entity families.
 
 Impact:
-- Admins cannot see what value was replaced in the audit UI
-- Misleading copy ("Email set to new@x.com") on edits vs true creates
+- Two sources of “who last changed this” for app-users vs one for crew/skillshow.
+- List API shape differs across management domains; frontend types already dropped modification fields for crew/skillshow only.
 
 Recommendation:
-Enable MongoDB `changeStreamPreAndPostImages` on `users` / `skillshowusers` and read pre-image fields, or capture previous values in the service before `save()` and write history synchronously for patch flows.
+In this PR (preferred for consistency): remove app-user `modificationOn` / `modificationBy` writes and list projections mirroring the crew/skillshow diff, relying on audit logs only. If scoped out, mark follow-up ticket and add a short code comment on app-user service explaining the temporary dual path.
 
-**PR comment (line 80):** Accepted — `oldValue` omitted for v1; audit rows use `set to` / `was cleared` wording until pre-images or synchronous capture is added.
+**PR comment (line 473, `app-user.service.ts` — new in this diff):** **High (Global consistency):** This PR adds `recordFormUpdate` / `recordBulkFormUpdates` / `recordCreated` on app-user but crew/skillshow also dropped `modificationOn` / `modificationBy` from models and repos. App-user still writes embedded modification metadata (e.g. lines 367–368, 502–505, 525–528) — migrate to audit-only (matching crew/skillshow) or document the intentional dual path.
 
-**Status:** Accepted
-
-**Accepted:** Team accepts missing prior values on CDC-driven updates for initial release. Pre-images or service-layer capture can be a follow-up when richer diff copy is required.
-
----
-
----
-Pending-actor store moved to Redis
-
-Risk Level: HIGH  
-File Path: src/utils/audit-log.utils.ts  
-Lines: 68-121
-
-Description:
-**Contract / reliability.** `PendingActorStore` now persists actors in Redis (`SET` / `GETDEL` with TTL) so any API replica can write and the CDC leader can read the actor on flush.
-
-Impact:
-- Actor attribution works across load-balanced replicas when Redis is available
-
-Recommendation:
-N/A — implemented. Ensure Redis is reachable in all environments running CDC.
-
-**Re-review (`42adbc7`):** ✅ **Fixed** — Redis-backed `PendingActorStore`; async `setPendingActor` / `setPendingActors` in watcher.
-
-**PR comment:** Resolved on branch.
-
-**Status:** ✅ Fixed
-
----
-
-## Additional notes (not blockers)
-
-- **Deploy:** `CHANGE_STREAM_LEADER` defaults `true` — multi-replica setups must set `CHANGE_STREAM_LEADER=false` on all but one replica or duplicates return.
-- **`history` on detail only:** No pagination cap on embedded array — acceptable for early rollout.
-- **`SKILLSHOW_USER_CDC_SKIP_FIELDS` includes `history`:** Prevents CDC feedback loop — correct.
-- **`password` in `USER_CDC_SKIP_FIELDS`:** Sensitive field redaction aligned with contract.
-- **Tests:** `change-stream.utils.test.ts` covers mapping helpers; no integration tests for leader gating or Redis actor round-trip.
-
----
-
-## Positive notes
-
-- Clean removal of `modificationOn` / `modificationBy` in favor of structured `history[]`.
-- Leader bootstrap + stream lifecycle match protected-module contract intent.
-- Redis-backed actor stash is the right fix for multi-replica writes.
-- Service layer uses `setPendingActor` / `setPendingActors` before writes; debouncer merges rapid User + SkillshowUser updates.
-- `buildDescription` + `SKILLSHOW_USER_AUDIT_DESC_OPTS` centralize copy; frontend `AuditLog` parses the same clause shapes.
-
+**Status:** Accepted — intentional dual-tracking for app-user in this ticket; migration to audit-only deferred.
 ---
 
 ## Summary
 
-| # | Title | Risk | Status | File | Lines |
-|---|--------|------|--------|------|-------|
-| 1 | Change streams gated to leader replica | CRITICAL | ✅ Fixed | src/services/change-stream.bootstrap.ts | 7-20 |
-| 2 | Change stream service resume, reconnect, and shutdown | HIGH | ✅ Fixed | src/services/mongo-change-stream.service.ts | 47-130 |
-| 3 | User collection watcher processes all user updates | HIGH | Accepted | src/services/skillshow-user-history.watcher.ts | 99-103, 173-184 |
-| 4 | CDC audit rows never capture prior field values | HIGH | Accepted | src/utils/change-stream.utils.ts | 68-86 |
-| 5 | Pending-actor store moved to Redis | HIGH | ✅ Fixed | src/utils/audit-log.utils.ts | 68-121 |
+| # | Title | Risk | Status | File | Lines | PR comment line |
+|---|--------|------|--------|------|-------|-----------------|
+| 1 | Delete operations do not write audit entries | HIGH | Accepted | src/services/crew-user.service.ts | 249-255 | 249 |
+| 2 | Audit persistence runs after DB commit without transaction | HIGH | Accepted | src/services/crew-user.service.ts | 184-196 | 190 |
+| 3 | Duplicate reporting-manager snapshot logic (crew vs skillshow) | HIGH | Accepted | src/services/crew-user-audit.service.ts | 99-152 | 99 |
+| 4 | App-user retains modificationOn/By; crew/skillshow migrated | HIGH | Accepted | src/services/app-user.service.ts | 367-368, 400-401, 454-456, 502-505, 525-528 (issue); 374, 473, 509 (PR-diff anchor) | 473 |
 
-**Merge readiness:** **Merge-ready (backend)** — all findings Fixed or Accepted. Deploy: one replica with `CHANGE_STREAM_LEADER=true`, Redis for pending actors.
+### Positive notes
+
+- Clean layering: `*-audit.service` → `auditLogService` → `auditLogRepository` → `audit-log.utils` (`diffAuditSnapshots`, `pickAuditSnapshot`, `normalizeAuditValue`).
+- Per-entity audit field allow-lists live in `src/constants/*.constants.ts`.
+- Entity list routes validate params and use `admin` RBAC; audit routes registered before `/:id` catch-alls.
+- Crew/skillshow bulk patches re-fetch list rows before diffing; reporting-manager IDs resolved to display names in audit snapshots.
+- Partner sport/logo normalization avoids noisy or path-leaking audit diffs.
+- Unit tests for `audit-log.utils`; domain service tests mock audit services to isolate behavior.
+
+**Merge readiness:** **No open Critical/High blockers on the backend diff.** All four findings **Accepted** (deferred or intentional for SKSH-296 v1).
