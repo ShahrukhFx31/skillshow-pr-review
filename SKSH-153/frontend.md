@@ -6,7 +6,7 @@
 **HEAD:** `2ce606b5` — feat: enhance ConnectedPlatformSelector and DistributeModal with vendorLogs support  
 **Reviewed:** 2026-06-08 — full `/pr-review` re-review (entire diff)  
 **Scope reviewed:** Full PR diff — **6 files**, ~68 insertions / ~34 deletions  
-**Findings:** 0 Critical, 0 High, 2 Medium (1 Fixed, 1 Open, 1 Open)  
+**Findings:** 0 Critical, 0 High, 3 Medium (1 Fixed, 1 Accepted, 1 Open)  
 **Note:** Review-only — findings for the developer; no agent code changes.
 
 ### Files reviewed
@@ -78,10 +78,10 @@ Impact:
 - `allowConnect` is still passed into the selector but has no effect for unconnected platforms in distribute mode.
 
 Recommendation:
-If banner-only connect is the intended SKSH-153 design, mark **Accepted** in QA/ticket notes and consider documenting in component JSDoc. If in-modal connect should remain, extend distribute visibility to include unconnected `PLATFORM_CONFIG` rows (Connect+ chips) while keeping eligibility/disable logic on the shared util for the footer.
+No code change required. **Accepted** — product confirmed banner-only connect is intentional for SKSH-153; users connect via page-level `PlatformConnectBanner` before distributing. Optional follow-up: one-line JSDoc on distribute `appearance` noting banner-only connect.
 
 **PR comment (`ConnectedPlatformSelector.tsx` line 177):**  
-**Medium (UX):** Distribute mode only shows eligible connected platforms — no in-modal “Connect +” for unconnected vendors. Please confirm banner-only connect is intentional for SKSH-153 or restore Connect+ chips for unconnected platforms.
+**Accepted** — banner-only connect during distribute is intentional per ticket owner; empty-state copy already directs users to page banners.
 
 ---
 
@@ -116,15 +116,12 @@ Promote `publishedPlatformsFromVendorLogs`, `getEligibleDistributePlatforms`, an
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 | 1 | Distribute eligibility rules duplicated | MEDIUM | ✅ Fixed | src/pages/videos/details/components/distribute/utils.ts | 115-135 |
-| 2 | In-modal OAuth connect removed for unconnected platforms | MEDIUM | Open | src/pages/videos/components/ConnectedPlatformSelector.tsx | 176-178, 335-346 |
+| 2 | In-modal OAuth connect removed for unconnected platforms | MEDIUM | Accepted | src/pages/videos/components/ConnectedPlatformSelector.tsx | 176-178, 335-346 |
 | 3 | Shared eligibility utils under page-specific distribute folder | MEDIUM | Open | src/pages/videos/components/ConnectedPlatformSelector.tsx | 19 |
 
 ## GitHub review comments (ready to paste)
 
-**`ConnectedPlatformSelector.tsx` ~line 177**  
-Medium (UX): Distribute mode only shows eligible connected platforms — no in-modal “Connect +” for unconnected vendors. Confirm banner-only connect is intentional for SKSH-153 or restore Connect+ chips for unconnected platforms.
-
 **`ConnectedPlatformSelector.tsx` ~line 19**  
 Medium (file structure): Shared selector imports eligibility from `details/components/distribute/utils`. Promote `getEligibleDistributePlatforms` / `getDistributeVisiblePlatformConfigs` to `src/pages/videos/utils/` since they’re used outside the details subtree.
 
-**Merge readiness:** **Merge-ready with minor follow-ups** — no Critical/High blockers; eligibility DRY is fixed (`2ce606b5`). Two open Medium items: confirm in-modal connect UX (#2) and optional util path promotion (#3). Safe to merge if product accepts banner-only connect during distribute.
+**Merge readiness:** **Merge-ready with optional follow-up** — no Critical/High blockers. #1 Fixed, #2 Accepted (banner-only connect intentional). One open Medium (#3): optional util path promotion; safe to merge without it.
