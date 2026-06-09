@@ -2,14 +2,14 @@
 
 **Repo:** skillshow-admin-ui  
 **Branch:** `SKSH-313`  
-**Base:** `main...HEAD` @ `de4d86a2`  
+**Base:** `main...HEAD` @ `fb6d13d1`  
 **Re-verified:** 2026-06-08  
-**Scope:** Event view crew management (list/add/remove), server sort/pagination for athletes/crew/videos sub-tables (Critical, High, Medium only)  
+**Scope:** Event view crew management (list/add/remove), related sub-tables (athletes/crew/videos), event ref routing (Critical, High, Medium only)  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
 **Aligned with:** [backend.md](./backend.md)
 
-**Findings:** 4 (1 High, 3 Medium) — **1 Open**, **1 Accepted**, **2 Fixed**
+**Findings:** 6 (1 High, 4 Medium, 1 Accepted-as-High) — **2 Open**, **1 Accepted**, **3 Fixed**
 
 ### Protected modules
 
@@ -19,9 +19,13 @@ No changes to `use-server-table-controls.ts`, `pagination-bar.tsx`, `use-paginat
 
 ## GitHub comments (Open findings)
 
-### 1. `src/pages/events/onboarding/components/event-view/event-view-related-table.tsx` line 35
+### 1. `src/pages/events/utils/event.utils.ts` line 219
 
-**Medium (Global consistency):** Server sort works via `applyServerSort`, but column defs still lack controlled `sortOrder` — pass `sortBy`/`sortOrder` from the section into column builders (video-library `columnSortOrder` pattern) so headers reflect active sort after tab switches.
+**High:** Athletes/crew tabs now call `fetchAllEventRelatedList`, which fans out parallel requests for every page (`EVENTS_LIST_MAX_LIMIT` 25) with no upper bound — please keep server-driven pagination/search for large lists or cap total rows fetched.
+
+### 2. `src/pages/events/onboarding/components/event-view/event-view-related-table.tsx` line 78
+
+**Medium (Global consistency):** Videos tab still uses server `applyServerSort` but column defs lack controlled `sortOrder` — mirror `video-library-columns.tsx` so headers reflect active server sort.
 
 ---
 
@@ -31,58 +35,78 @@ Unrelated dashboard card subtitles removed (scope / UX regression)
 Risk Level: HIGH  
 File Path: src/pages/management/app-users/dashboard/index.tsx  
 Lines: 101-109 (removed)  
-File Path: src/pages/management/crew-users/dashboard/index.tsx  
-Lines: 101-109 (removed)  
-File Path: src/pages/management/skillshow-users/dashboard/index.tsx  
-Lines: 101-109 (removed)  
-File Path: src/pages/partners/dashboard/index.tsx  
-Lines: 70-78 (removed)  
-File Path: src/pages/events/dashboard/index.tsx  
-Lines: 144-152 (removed)
+(+ crew-users, skillshow-users, partners, events dashboard — same pattern)
 
 Description:
-Five dashboard pages drop their `Card` `title` blocks (page name + descriptive subtitle) while this ticket is event-view crew/pagination work. Commit `723c2f03` (“remove unused Typography”) is unrelated to SKSH-313 and removes user-facing helper copy.
+Five dashboard pages drop their `Card` `title` blocks while this ticket is event-view work.
+
+**Status:** Accepted — intentional dashboard title cleanup per team decision.
+
+---
+
+---
+Athletes/crew tabs fetch unbounded pages via `fetchAllEventRelatedList`
+
+Risk Level: HIGH  
+File Path: src/pages/events/utils/event.utils.ts  
+Lines: 218-244  
+File Path: src/pages/events/onboarding/hooks/use-event-view-related-lists.ts  
+Lines: 50-60
+
+Description:
+**Contract / performance / Global consistency.** Commit `432529b2` moves athletes and crew from server-driven sort/search/pagination (built earlier in this PR) to client-side handling: `fetchAllEventRelatedList` loads page 1, then `Promise.all` for every remaining page at `EVENTS_LIST_MAX_LIMIT` (25) with **no total cap**. Results are filtered/sorted/paginated in `event-view-related-table.tsx` via `matchesSearch`, column comparators, and `usePagination`.
 
 Impact:
-- Unrelated UX regression on Partners, App Users, Crew Users, Skillshow Users, and Events dashboards bundled into an events PR.
-- Reviewers and QA must validate five extra surfaces; rollback risk if the event PR is held.
+- An event with 500 registered athletes triggers ~20 parallel list API calls on tab open and holds the full dataset in memory.
+- Server list endpoints (sort, search, pagination) built in this ticket are unused for athletes/crew; behavior diverges from the videos tab (still server-driven via `useServerTableControls`).
+- Risk of slow tab loads and browser memory pressure on large events.
 
 Recommendation:
-Revert the dashboard `title` removals in this branch (restore `Typography` subtitles) or move them to a separate cleanup PR. Keep SKSH-313 limited to `src/pages/events/**` event-view changes and directly related API/utils.
+Either (a) keep server-driven lists for athletes/crew using `useServerTableControls` + debounced search/sort params (consistent with videos and backend contract), or (b) if client-side is intentional for small lists only, cap `fetchAllEventRelatedList` (max pages or max rows) and document the limit; fall back to server pagination when total exceeds the cap.
 
-**PR comment (`app-users/dashboard/index.tsx` — re-add at former title site ~line 101):**  
-**High:** This PR removes dashboard card title/subtitle copy unrelated to event crew work — please revert on the five management/partner/events dashboard pages or split to a separate PR.
+**PR comment (line 219):**  
+**High:** `fetchAllEventRelatedList` fans out unbounded parallel page requests (25 rows/page) for athletes/crew — please use server pagination for large lists or add a hard fetch cap with server fallback.
 
-**Status:** Accepted — intentional dashboard title cleanup bundled in this PR per team decision; page context remains clear from route/nav.
-
----
+**Status:** Open
 
 ---
-Event view tables omit controlled column `sortOrder` (Global consistency)
+
+---
+Videos tab omits controlled column `sortOrder` (Global consistency)
 
 Risk Level: MEDIUM  
 File Path: src/pages/events/onboarding/components/event-view/event-view-related-table.tsx  
-Lines: 35-91  
-File Path: src/pages/events/onboarding/components/event-view/event-view-related-columns.tsx  
-Lines: 32-86  
+Lines: 78-88  
 File Path: src/pages/events/onboarding/constants.ts  
-Lines: 138-190
+Lines: 168-190
 
 Description:
-**Global consistency:** Server sort state lives in `useServerTableControls` and flows to API via `use-event-view-related-lists`, but Ant Table column defs only set `sorter: true` without per-column `sortOrder`. Elsewhere (`video-library-columns.tsx`) a `columnSortOrder` helper binds header arrows to server `sortBy`/`sortOrder`.
-
-**Re-verification (@ `de4d86a2`):** Commit `de4d86a2` removes unused `sortBy`/`sortOrder` props from `EventViewRelatedTable` (they were never consumed) — that cleans types but does **not** add controlled column `sortOrder`. `buildEventViewAthleteColumns` / `buildEventViewCrewColumns` still take no sort args; `EVENT_VIEW_*_COLUMNS` have no `sortOrder` field. `showSorterTooltip` enables hover tooltips only.
+**Global consistency:** The videos tab still uses server sort (`applyServerSort` + `useServerTableControls`) but `EVENT_VIEW_VIDEO_COLUMNS` only set `sorter: true` without per-column `sortOrder`. Athletes/crew tabs no longer apply — they use client-side comparator `sorter` functions (Ant shows sort indicators natively).
 
 Impact:
-- Sorting works server-side but column headers do not reflect active sort after tab switch or initial load; users cannot see which column/direction is applied without inferring from data order.
+- Mapped videos: server sort works but column headers do not reflect active `videoSortBy`/`videoSortOrder` after load or tab switch.
 
 Recommendation:
-Pass `sortBy` / `sortOrder` from `event-view-related-section.tsx` into column builders and set `sortOrder: columnSortOrder(key, sortBy, sortOrder)` on each sortable column — same pattern as `video-library-columns.tsx`.
+Pass `videoSortBy` / `videoSortOrder` into video column builders and set `sortOrder` via a `columnSortOrder` helper (same as `video-library-columns.tsx`).
 
-**PR comment (`event-view-related-table.tsx` line 35):**  
-**Medium (Global consistency):** Server sort is wired, but columns still lack controlled `sortOrder` — pass sort state into column builders (`columnSortOrder` pattern) so headers show the active sort after tab changes. Removing unused table props (`de4d86a2`) does not fix header indicators.
+**PR comment (line 78):**  
+**Medium:** Videos tab server sort is wired, but columns still lack controlled `sortOrder` — pass sort state into column defs like video library.
 
 **Status:** Open
+
+---
+
+---
+Event view tables omit controlled column `sortOrder` (athletes/crew)
+
+Risk Level: MEDIUM  
+File Path: src/pages/events/onboarding/constants.ts  
+Lines: 134-166
+
+Description:
+**Superseded @ `432529b2`:** Athletes/crew columns now use client-side `sorter: (a, b) => localeCompare(...)` comparators; Ant Table manages sort indicators without server `sortOrder` binding.
+
+**Status:** ✅ Fixed (by design change to client-side sort)
 
 ---
 
@@ -91,14 +115,10 @@ Add Crew modal duplicates Add Athlete modal (DRY)
 
 Risk Level: MEDIUM  
 File Path: src/pages/events/onboarding/components/event-view/event-view-add-related-modal.tsx  
-Lines: 1-78  
-File Path: src/pages/events/onboarding/hooks/use-event-view-add-related-modal.ts  
-Lines: 1-62
+Lines: 1-78
 
 Description:
-**DRY.** `c3c73a14` extracts `EventViewAddRelatedModal` + `useEventViewAddRelatedModal`; athlete and crew modals are thin wrappers passing service fns, query keys, and copy constants.
-
-**Re-verification (@ `de4d86a2`):** Unchanged; shared modal/hook still in place.
+Shared `EventViewAddRelatedModal` + `useEventViewAddRelatedModal`; athlete/crew modals are thin wrappers.
 
 **Status:** ✅ Fixed
 
@@ -112,7 +132,7 @@ File Path: src/pages/events/onboarding/components/event-view/event-view-related-
 Lines: 1-22
 
 Description:
-Backend supports crew `designation`/`status` filters, but the event view had a non-functional filter dropdown. **Re-verification (@ `de4d86a2`):** Filter control removed from `EventViewRelatedActions` (search-only toolbar); no misleading filter affordance.
+Non-functional filter dropdown removed; search-only toolbar.
 
 **Status:** ✅ Fixed
 
@@ -123,20 +143,22 @@ Backend supports crew `designation`/`status` filters, but the event view had a n
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 | 1 | Unrelated dashboard card subtitles removed | HIGH | Accepted | src/pages/management/app-users/dashboard/index.tsx | 101-109 |
-| 2 | Event view tables omit controlled column `sortOrder` | MEDIUM | Open | src/pages/events/onboarding/components/event-view/event-view-related-table.tsx | 35-91 |
-| 3 | Add Crew modal duplicates Add Athlete modal | MEDIUM | ✅ Fixed | src/pages/events/onboarding/components/event-view/event-view-add-related-modal.tsx | 1-78 |
-| 4 | Backend crew filters exist; filter UI placeholder | MEDIUM | ✅ Fixed | src/pages/events/onboarding/components/event-view/event-view-related-actions.tsx | 1-22 |
+| 2 | Athletes/crew `fetchAllEventRelatedList` unbounded fan-out | HIGH | Open | src/pages/events/utils/event.utils.ts | 218-244 |
+| 3 | Videos tab omits controlled column `sortOrder` | MEDIUM | Open | src/pages/events/onboarding/components/event-view/event-view-related-table.tsx | 78-88 |
+| 4 | Athletes/crew controlled server `sortOrder` (superseded) | MEDIUM | ✅ Fixed | src/pages/events/onboarding/constants.ts | 134-166 |
+| 5 | Add Crew modal duplicates Add Athlete modal | MEDIUM | ✅ Fixed | src/pages/events/onboarding/components/event-view/event-view-add-related-modal.tsx | 1-78 |
+| 6 | Filter UI placeholder | MEDIUM | ✅ Fixed | src/pages/events/onboarding/components/event-view/event-view-related-actions.tsx | 1-22 |
 
-### Re-review notes (2026-06-08 @ `de4d86a2`)
+### Re-review notes (2026-06-08 @ `fb6d13d1`)
 
 | Change | Verdict |
 |--------|---------|
-| `de4d86a2` remove unused `sortBy`/`sortOrder` table props | Cleanup only — **does not fix** column header indicators |
-| `c3c73a14` shared add-related modal/hook | **Fixed** DRY finding |
-| Filter dropdown removed from related actions | **Fixed** placeholder filter finding |
-| Dashboard `Typography` titles removed | **Accepted** per team |
-| Backend `b63c391` `crewNameSort` | See [backend.md](./backend.md) — all backend findings fixed |
+| `432529b2` client-side athletes/crew lists | **New HIGH** — unbounded `fetchAllEventRelatedList` |
+| `432529b2` client comparator sorters | Resolves prior athletes/crew `sortOrder` finding |
+| `ef48d4e9` / `getEvent` rename | Consistent with backend `getEventByRef` |
+| `de4d86a2` remove unused table sort props | Cleanup; superseded by `432529b2` architecture |
+| Dashboard titles | **Accepted** |
 
-**Positive notes:** Event related section uses `useServerTableControls`, `applyServerSort`, `PaginationBar`, and `DestructiveActionConfirmModal`; tab switch resets search and per-tab default sort; crew CRUD API-driven; mock crew rows removed; shared add-related modal reduces duplication.
+**Positive notes:** Videos tab uses `useServerTableControls` + `PaginationBar` + `applyServerSort`; athletes/crew use `usePagination` `hidden`/`bar` for client paging; crew CRUD + shared add modal; `DestructiveActionConfirmModal` for removes; `buildEventViewPath` reused in app-user linked events.
 
-**Merge readiness:** **Not merge-ready** — 1 open Medium on frontend (controlled column `sortOrder`). Backend has no open blockers.
+**Merge readiness:** **Not merge-ready** — 1 open High + 1 open Medium on frontend. Backend has no open blockers.
