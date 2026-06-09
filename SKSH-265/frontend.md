@@ -3,35 +3,79 @@
 **Repo:** skillshow-admin-ui  
 **Branch:** `SKSH-265`  
 **Base:** `main...HEAD`  
-**Re-verified:** 2026-06-08 @ `bf68d76b`  
+**Re-verified:** 2026-06-01 @ `3ae937f6`  
 **Scope:** Crew dashboard, editor feedback, admin insights tabs, internal revision UI, edit-request detail, realtime/unread (Critical, High, Medium only)  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
 **Aligned with:** [backend.md](./backend.md)
 
-**Findings:** 5 (0 Critical, 2 High, 1 Medium, 2 Fixed)
-
-> **Scope note:** Pagination / list-query performance findings are omitted per review request.
+**Findings:** 5 (1 Critical, 1 High, 1 Medium) — **2 Open**, **3 Fixed**
 
 ### Protected modules
 
-No changes in this PR to `pagination-bar.tsx`, `use-pagination.ts`, `use-server-table-controls.ts`, `table-sort.ts`, `antd.adapter.tsx`, `destructive-action-confirm-modal.tsx`, or `AuditLogTable.tsx`.
+**Modified in this PR:** `src/hooks/use-server-table-controls.ts` (optional `searchControls` for URL-synced search).
+
+No changes to `pagination-bar.tsx`, `use-pagination.ts`, `table-sort.ts`, `antd.adapter.tsx`, `destructive-action-confirm-modal.tsx`, or `AuditLogTable.tsx`.
 
 ---
 
 ## GitHub comments (Open findings)
 
-### 1. `src/pages/editRequest/hooks/useEditRequestDetail.ts` line 58
+### 1. `src/hooks/use-server-table-controls.ts` line 17
 
-**High:** Detail hook still fans out one `getVideo` per source file (up to 20) — can we batch-fetch or embed video summaries on the edit-request detail response to avoid N parallel calls per page view?
+**Critical:** This PR modifies the frozen `useServerTableControls` hook — please revert and move the `searchControls` extension to a dedicated shared-module ticket, or get explicit approval to change the protected hook before merge.
 
-### 2. `src/pages/adminEditRequest/index.tsx` line 93
+### 2. `src/pages/adminEditRequest/components/admin-edit-request-table.tsx` line 67
 
-**High:** Tabbed server lists still hand-roll `page`/`pageSize` — please adopt `useServerTableControls` + `PaginationBar` (as in `partners/dashboard`) so tab/filter changes reset page via `filterKey` and match the protected list contract.
+**Medium:** Both admin list tables hand-build hidden `Table` pagination + `PaginationBar` props — please extract a feature-level helper (or expose `bar`/`hidden` from the page’s pagination hook) so `admin-edit-request-table.tsx` and `admin-edit-request-insights-table.tsx` share one footer contract.
 
-### 3. `src/pages/adminEditRequest/components/admin-edit-request-insights-table.tsx` line 49
+---
 
-**Medium:** Insights table duplicates rows-per-page + `Pagination` markup — please compose `PaginationBar` / `usePagination.bar` instead of copying the footer from `admin-edit-request-table.tsx`.
+---
+Protected module changed: `useServerTableControls`
+
+Risk Level: CRITICAL  
+File Path: src/hooks/use-server-table-controls.ts  
+Lines: 6-40
+
+Description:
+**Protected module.** This PR adds optional `searchControls` to bypass internal search state so `adminEditRequest/index.tsx` can URL-sync EDR search via `useAdminEditRequestListControls`. The hook is listed as frozen in the review contract; changes require a dedicated ticket or explicit authorization.
+
+Impact:
+- Shared list-control behavior changes for every consumer of `useServerTableControls` across the admin UI
+- Future pagination/search refactors must account for dual search paths in the protected hook
+
+Recommendation:
+Revert the protected-file diff and either (a) open a scoped ticket to extend `useServerTableControls` with `searchControls`, or (b) keep URL search outside the hook by passing debounced search through `extraFilterState` only (no protected-module edit).
+
+**PR comment (line 17):**  
+**Critical:** This PR modifies the frozen `useServerTableControls` hook — please revert and move the `searchControls` extension to a dedicated shared-module ticket, or get explicit approval before merge.
+
+**Status:** Open
+
+---
+
+---
+Admin list tables duplicate pagination footer wiring
+
+Risk Level: MEDIUM  
+File Path: src/pages/adminEditRequest/components/admin-edit-request-table.tsx  
+Lines: 67-86
+
+Description:
+**DRY / Contract.** `AdminEditRequestTable` and `AdminEditRequestInsightsTable` both manually construct `hiddenPagination` (`style: { display: "none" }`) and a `bar` object for `PaginationBar`. The page already uses `useServerTableControls` (which wraps `usePagination` internally) but does not expose `bar`/`hidden`, so both child tables copy the same ~20-line footer pattern.
+
+Impact:
+- Two copies of rows-per-page + hidden-pagination wiring to maintain
+- Drifts from the protected `usePagination.bar` / `usePagination.hidden` contract over time
+
+Recommendation:
+Extract `admin-edit-request-list-pagination.tsx` (feature-level) that accepts `{ page, pageSize, setPage, setPageSize, total }` and renders hidden table pagination + `PaginationBar`, or extend the page hook return to pass through `bar`/`hidden` without duplicating markup in both tables.
+
+**PR comment (line 67):**  
+**Medium:** Both admin list tables hand-build hidden pagination + `PaginationBar` props — please extract a shared feature helper so the footer contract lives in one place.
+
+**Status:** Open
 
 ---
 
@@ -40,22 +84,14 @@ Edit-request detail loads each source video with a separate API call
 
 Risk Level: HIGH  
 File Path: src/pages/editRequest/hooks/useEditRequestDetail.ts  
-Lines: 54-83
+Lines: 40-50
 
 Description:
-`useEditRequestDetail` runs `Promise.allSettled(requestedVideoIds.map((vid) => getVideo(vid)))`. Backend allows up to 20 videos per request, so one detail view can trigger up to 20 parallel `GET /videos/:id` calls on every load/refetch. `allSettled` avoids total failure but not round-trip count.
+Detail hook now loads via `loadEditRequestDetailWithOutputs` and maps `backendRequest.sourceVideos` with `mapEditRequestSourceVideoSummaries` — no per-video `getVideo` fan-out.
 
-Impact:
-- Slow detail load and extra server load for multi-video requests
-- Partial failures drop videos from the resolved list silently
+**Re-verification (@ `3ae937f6`):** N+1 video fetch removed; backend embeds summaries.
 
-Recommendation:
-Batch videos-by-ids API or embed trimmed video metadata on `GET /edit-requests/:id`.
-
-**PR comment (line 58):**  
-**High:** Detail hook still fans out one `getVideo` per source file (up to 20) — can we batch-fetch or embed video summaries on the edit-request detail response?
-
-**Status:** Open
+**Status:** ✅ Fixed
 
 ---
 
@@ -64,74 +100,30 @@ Admin edit-request lists bypass `useServerTableControls` contract
 
 Risk Level: HIGH  
 File Path: src/pages/adminEditRequest/index.tsx  
-Lines: 93-170
+Lines: 100-116
 
 Description:
-**Contract / Global consistency.** This PR adds insights and internal-revision tabs, export-all, and unread badges, but list state remains hand-rolled (`useState` for `page`/`pageSize`, manual `setPage(1)` in filter handlers). Server-driven dashboards elsewhere (`partners/dashboard`, `management/app-users/dashboard`, `crew-users/dashboard`) use `useServerTableControls` with `extraFilterState` / `filterKey` for consistent page reset.
+**Contract / Global consistency.** Page now uses `useServerTableControls` with `extraFilterState` (tab, filters, date range) and external `searchControls` from `useAdminEditRequestListControls` for URL-synced EDR search. `filterKey` resets page on tab/filter/search changes.
 
-Impact:
-- Tab/filter changes depend on ad-hoc `useEffect` resets; new tabs can miss a reset path
-- Pagination UI duplicated in child tables instead of `PaginationBar` + `usePagination.hidden`
+**Re-verification (@ `3ae937f6`):** Hand-rolled `useState` pagination removed.
 
-Recommendation:
-Refactor `index.tsx` to `useServerTableControls` with `extraFilterState: { viewMode, paymentStatusFilter, requestedByFilter, createdDateRange }`; pass `bar`/`hidden` to `AdminEditRequestTable` and `AdminEditRequestInsightsTable`.
-
-**PR comment (line 93):**  
-**High:** Tabbed server lists still hand-roll `page`/`pageSize` — please adopt `useServerTableControls` + `PaginationBar` so tab/filter changes reset page via `filterKey`.
-
-**Status:** Open
+**Status:** ✅ Fixed
 
 ---
 
 ---
-Insights table duplicates pagination footer markup
+Crew dashboard and insights tabs stale on socket events
 
 Risk Level: MEDIUM  
-File Path: src/pages/adminEditRequest/components/admin-edit-request-insights-table.tsx  
-Lines: 49-74
+File Path: src/utils/edit-request-realtime.utils.ts  
+Lines: 269-338
 
 Description:
-**DRY / Contract.** New insights table copies the manual `Select` + `Pagination` footer pattern from `admin-edit-request-table.tsx` instead of composing frozen `PaginationBar` via `usePagination`.
+`refetchActiveEditRequestSurfaces` refetches `crewDashboardQueryKey`, and `refetchAdminEditRequestListSurface` invalidates/refetches insights assignment-returns and feedbacks query keys on socket events via global `useEditRequestSocketRealtime`.
 
-Impact:
-- Two copies of rows-per-page UI to maintain when bounds or copy change
-- Drifts from protected pagination contract over time
+**Re-verification (@ `3ae937f6`):** Crew dashboard + insights query keys included in sync path.
 
-Recommendation:
-Accept `bar` props from parent `usePagination` hook or render `<PaginationBar {...bar} />` below the table.
-
-**PR comment (line 49):**  
-**Medium:** Please use `PaginationBar` / `usePagination.bar` here instead of duplicating the footer markup from the main admin table.
-
-**Status:** Open
-
----
-
----
-Crew dashboard does not refresh on edit-request realtime events
-
-Risk Level: MEDIUM  
-**Status:** ✅ Fixed  
-File Path: src/utils/edit-request-realtime.utils.ts  
-Lines: 288-303
-
-**Re-verification (@ `bf68d76b`):** `refetchActiveEditRequestSurfaces` refetches `crewDashboardQueryKey` (line 302). Global `useEditRequestSocketRealtime` (via `admin-edit-request-unread-summary-bridge.tsx` in dashboard layout) calls `syncEditRequestRealtimeQueries` on socket events.
-
-**PR comment:** Resolved on branch.
-
----
-
----
-Admin insights tabs omit socket-driven cache invalidation
-
-Risk Level: MEDIUM  
-**Status:** ✅ Fixed  
-File Path: src/utils/edit-request-realtime.utils.ts  
-Lines: 254-267
-
-**Re-verification (@ `bf68d76b`):** `refetchAdminEditRequestListSurface` refetches insights assignment-returns and feedbacks query keys; `invalidateCachedAdminEditRequestListQueries` marks them stale.
-
-**PR comment:** Resolved on branch.
+**Status:** ✅ Fixed
 
 ---
 
@@ -139,18 +131,18 @@ Lines: 254-267
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Edit-request detail loads each source video with a separate API call | HIGH | Open | src/pages/editRequest/hooks/useEditRequestDetail.ts | 54-83 |
-| 2 | Admin edit-request lists bypass `useServerTableControls` contract | HIGH | Open | src/pages/adminEditRequest/index.tsx | 93-170 |
-| 3 | Insights table duplicates pagination footer markup | MEDIUM | Open | src/pages/adminEditRequest/components/admin-edit-request-insights-table.tsx | 49-74 |
-| 4 | Crew dashboard does not refresh on edit-request realtime events | MEDIUM | ✅ Fixed | src/utils/edit-request-realtime.utils.ts | 288-303 |
-| 5 | Admin insights tabs omit socket-driven cache invalidation | MEDIUM | ✅ Fixed | src/utils/edit-request-realtime.utils.ts | 254-267 |
+| 1 | Protected module changed: `useServerTableControls` | CRITICAL | Open | src/hooks/use-server-table-controls.ts | 6-40 |
+| 2 | Admin list tables duplicate pagination footer wiring | MEDIUM | Open | src/pages/adminEditRequest/components/admin-edit-request-table.tsx | 67-86 |
+| 3 | Edit-request detail loads each source video with a separate API call | HIGH | ✅ Fixed | src/pages/editRequest/hooks/useEditRequestDetail.ts | 40-50 |
+| 4 | Admin edit-request lists bypass `useServerTableControls` contract | HIGH | ✅ Fixed | src/pages/adminEditRequest/index.tsx | 100-116 |
+| 5 | Crew dashboard and insights tabs stale on socket events | MEDIUM | ✅ Fixed | src/utils/edit-request-realtime.utils.ts | 269-338 |
 
 ## Positive notes
 
-- **Global consistency (good):** `refetchActiveEditRequestSurfaces` + `useEditRequestSocketRealtime` unify athlete, admin/editor, crew, insights, and dashboard refresh; deprecated per-page socket hooks consolidated.
+- **Global consistency (good):** `refetchActiveEditRequestSurfaces` + `useEditRequestSocketRealtime` unify athlete, admin/editor, crew, insights, and dashboard refresh.
 - Crew/editor routing and role gating consistent; editor feedback gates on `myLatestFeedback`.
-- **Contract (good):** Output delete uses `DestructiveActionConfirmModal`; export uses shared `fetchAllPaginatedListItems`.
-- Activity history uses `ActivityHistoryTimeline` (domain timeline, not audit-log list — `AuditLogTable` N/A).
-- **Protected modules:** None modified in this PR.
+- **Contract (good):** Output delete uses `DestructiveActionConfirmModal`; export uses `fetchAllPaginatedListItems`; insights tables compose `PaginationBar`.
+- Activity history uses `ActivityHistoryTimeline` (domain timeline — `AuditLogTable` N/A).
+- URL-synced tab/search via `useAdminEditRequestListControls` improves shareable admin list state.
 
-**Merge readiness:** **Not merge-ready** — 2 open High + 1 open Medium on frontend; 4 open High on backend. Realtime findings fixed on branch.
+**Merge readiness:** **Not merge-ready** — 1 open Critical (protected hook change) + 1 open Medium on frontend; 1 open High on backend (`validatedQuery`). Prior High/Medium realtime and list-control findings fixed on branch.
