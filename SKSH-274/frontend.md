@@ -2,36 +2,38 @@
 
 **Repo:** skillshow-admin-ui  
 **Branch:** `SKSH-274-1`  
-**Base:** `main...HEAD` @ `5460457c`  
-**Reviewed:** 2026-06-09  
+**Base:** `main...HEAD` @ `935ecf8b`  
+**Re-reviewed:** 2026-06-09  
 **Scope:** Server-driven **Export All** via `TableExportButton` + `POST /v1/table-export` (Critical / High / Medium)  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
-**Files changed (vs `main`):** 14 — `tableExportService`, `TableExportButton`, `use-table-export`, `postBlob` API client, `download-blob`, constants, wiring on 7 list dashboards
+**Files changed (vs `main`):** 15 — `tableExportService`, `TableExportButton`, `use-table-export`, `postBlob` API client, `download-blob`, constants/types, wiring on 7 list dashboards
 
-**Findings:** 3 (0 Critical, 2 High, 1 Medium) — **3 Open**
-
-> **Note:** Prior review (2026-06-03, branch `SKSH-274`) covered client-side paginated export-all. This branch replaces that approach with server-side CSV download. Findings below apply to `SKSH-274-1`.
+**Findings:** 0 (0 Critical, 0 High, 0 Medium) — **1 Fixed**, **2 Accepted**
 
 ### Protected modules
 
-No changes to `pagination-bar.tsx`, `use-pagination.ts`, `use-server-table-controls.ts`, `table-sort.ts`, `antd.adapter.tsx`, `destructive-action-confirm-modal.tsx`, or `AuditLogTable.tsx`. List pages continue to use `useServerTableControls` for table data; export is a separate action — correct separation, but filter state is not forwarded (see finding #1).
+No changes to frozen table-control, audit-log, or theme modules.
 
 ---
 
-## GitHub comments (Open findings)
+## GitHub comments (Accepted — intentional, no change)
 
-### 1. `src/api/services/tableExportService.ts` line 43
+### 1. `src/api/services/tableExportService.ts` line 103
 
-**High (Contract):** `exportTable` POSTs only `{ table }` (line 43). `TableExportButton` (`table-export-button.tsx` line 20) calls `runExport(table)` with no filter props. Dashboard call sites (e.g. `events/dashboard/index.tsx` line 137) pass only `table`, while `listEvents` in the same file (lines 60–67) sends `debouncedSearch`, `eventTypeFilter`, and `status`. **Export All** ignores active filters. Pass the same list params the `queryFn` uses once the backend accepts them.
+**Accepted (2026-06-09):** POST body `{ table }` only is **intentional** — **Export All** triggers a **full-table** server export. Filtered/page/selection export stays on the sibling **Export X** button (`onExportReady` + client CSV). No filter props on `TableExportButton` by design.
 
-### 2. `src/pages/events/dashboard/index.tsx` line 137
+### 2. `src/components/table-export-button.tsx` line 17
 
-**High (DRY / UX):** Line 129–136 **Export Event** uses client `export-to-csv` (current page/selection); line 137 **Export All** hits the server with a different column set (see backend `list-export.utils.ts`). Same pattern on `partners/dashboard/index.tsx` line 95, `management/app-users/dashboard/index.tsx` line 94, and sibling dashboards. Align server export columns with page `csvValue` configs or consolidate to one export path.
+**Accepted (2026-06-09):** Not disabling **Export All** when filtered `total === 0` is **intentional** — full-table export should remain available even when the current filtered view is empty (the export is not scoped to the filter).
 
-### 3. `src/components/table-export-button.tsx` line 17
+---
 
-**Medium (KISS / UX):** `disabled` only reflects `isExporting` (line 17) — no prop for filtered `total === 0`. Parent pages gate the sibling **Export X** button on `hasNoEvents` but always render `TableExportButton` enabled, so an empty filtered table can still trigger a full server export.
+## GitHub comments (Fixed — no action)
+
+### 3. Dual export CSV column mismatch ✅
+
+Server export columns align with UI `csvValue` defs. **Fixed.**
 
 ---
 
@@ -40,85 +42,30 @@ Export All does not send active table filters to API
 
 Risk Level: HIGH  
 File Path: src/api/services/tableExportService.ts  
-Lines: 40-44  
+Lines: 103  
 File Path: src/components/table-export-button.tsx  
-Lines: 7-26  
-File Path: src/pages/events/dashboard/index.tsx (representative)  
-Lines: 43-78, 137
+Lines: 7-20  
+File Path: src/pages/events/dashboard/index.tsx  
+Lines: 60-67, 137
 
 Description:
-**Contract:** `exportTable` posts `{ table }` only. `TableExportButton` accepts no filter/search/sort props and `useTableExport` has no access to `useServerTableControls` state. Every dashboard wired in this PR (events, partners, video library, app/crew/skillshow users, edit requests) applies filters to `queryFn` / `listEditRequests` but not to export.
+`exportTable` posts `{ table }` only. Dashboards pass list filters to `queryFn` but not to `TableExportButton`.
 
-Example — events page passes `debouncedSearch`, `eventTypeFilter`, and `status` (active/inactive tab) to `listEvents`, but `TableExportButton` sends only `PAGE_TABLE_EXPORT_KEY.events`.
+**Accepted (2026-06-09):** Confirmed **intentional** with backend — **Export All** = full dataset; **Export X** = filtered page/selection. Matches product split documented in backend review.
 
-Impact:
-- **Export All** downloads data outside the user's current view (wrong rows, wrong status tab, ignored search).
-- Regression from prior SKSH-274 behavior that fetched all pages **with current filters**.
-- Cross-stack mismatch with backend export service (also unfiltered).
-
-Recommendation:
-Extend `TableExportButton` (or a page-level handler) to accept export params:
-
-```tsx
-// events/dashboard/index.tsx
-<TableExportButton
-  table={PAGE_TABLE_EXPORT_KEY.events}
-  filters={{
-    search: debouncedSearch || undefined,
-    eventType: eventTypeFilter ?? undefined,
-    status,
-    sortBy,
-    sortOrder,
-  }}
-/>
-```
-
-Update `exportTable` / `TableExportRequest` to include `filters` in the POST body. Keep `queryKey`-style parity: every input that affects the list should affect export.
-
-**PR comment (`tableExportService.ts` line 43):**  
-**High:** POST body is only `{ table }` — search, status tabs, and filters are ignored. Please forward the same params as the list `queryFn`.
+**PR comment (`tableExportService.ts` line 103):**  
+**High:** POST body is only `{ table }`.  
+**Accepted:** Intentional — full-table export by design.
 
 **PR comment (`table-export-button.tsx` line 20):**  
-**High:** `onClick` calls `runExport(table)` with no filter/search/sort args from the parent page.
+**High:** `runExport(table)` with no filter args.  
+**Accepted:** Intentional — filters not part of Export All contract.
 
 **PR comment (`events/dashboard/index.tsx` line 137):**  
-**High:** `TableExportButton` receives only `table`; `listEvents` above (lines 60–67) passes `debouncedSearch`, `eventTypeFilter`, `status` — export/list params are out of sync.
+**High:** `TableExportButton` only receives `table`.  
+**Accepted:** Intentional — list filters apply to on-screen data, not full export.
 
-**Status:** Open
-
----
-
----
-Dual export buttons produce inconsistent CSVs (page vs server)
-
-Risk Level: HIGH  
-File Path: src/pages/events/dashboard/index.tsx  
-Lines: 129-137  
-File Path: src/pages/partners/dashboard/index.tsx  
-Lines: 87-95  
-File Path: src/pages/management/app-users/dashboard/index.tsx  
-Lines: 86-94
-
-Description:
-**DRY / Global consistency:** Each dashboard keeps the existing **Export X** button (current page rows or selection → client `export-to-csv` using column `csvValue` defs) and adds **Export All** (server blob download). Server CSV columns differ from UI column configs (see backend `list-export.utils.ts` vs `event-columns.tsx`, `partners-columns.tsx`, etc.). Row scope also differs: page export = current page/selection; server export = up to 50k unfiltered rows.
-
-Impact:
-- Admins receive different file shapes from two buttons on the same toolbar.
-- Maintenance burden: column changes must be updated in two places.
-
-Recommendation:
-Either (a) make server export the single **Export All** path that uses the same column schema as page export and respects filters, retiring redundant client full-export logic, or (b) remove page export when server export covers the use case. Short term: document the difference in button labels (e.g. "Export Page" vs "Export Full Database") until columns align.
-
-**PR comment (`events/dashboard/index.tsx` line 137):**  
-**High:** **Export Event** (line 135) and **Export All** (line 137) on the same toolbar produce different CSV columns and row scope. Please align server export with `csvValue` defs or consolidate.
-
-**PR comment (`partners/dashboard/index.tsx` line 95):**  
-**High:** Same dual-export mismatch — **Export Partners** (line 93) vs `TableExportButton` (line 95).
-
-**PR comment (`management/app-users/dashboard/index.tsx` line 94):**  
-**High:** Same dual-export mismatch — **Export Users** (line 92) vs `TableExportButton` (line 94).
-
-**Status:** Open
+**Status:** Accepted
 
 ---
 
@@ -127,33 +74,40 @@ Export All enabled when filtered list is empty
 
 Risk Level: MEDIUM  
 File Path: src/components/table-export-button.tsx  
-Lines: 11-26
+Lines: 11-17
 
 Description:
-Sibling **Export X** buttons are gated by `hasNoEvents` / `hasNoPartners` (no rows in system), but `TableExportButton` is always enabled when rendered. A user can apply filters that yield `total === 0` on the table yet still trigger a full unfiltered server export (thousands of rows).
+`TableExportButton` is not disabled when filtered `total === 0`.
 
-Impact:
-- Confusing UX: empty table but export still downloads unrelated data.
-- Reinforces filter-mismatch issue when export is unfiltered.
-
-Recommendation:
-Pass `disabled={total === 0}` from parent pages (based on filtered `total`, not global meta). Once filters are forwarded, disable when filtered export would return zero rows.
+**Accepted (2026-06-09):** Intentional — full-table export must remain available when the filtered view is empty; disabling on `total === 0` would block valid full exports.
 
 **PR comment (`table-export-button.tsx` line 17):**  
-**Medium:** `disabled` only checks `isExporting` — pass `disabled={total === 0}` from parents so Export All cannot run when the filtered list is empty.
+**Medium:** `disabled` only checks `isExporting`.  
+**Accepted:** Intentional — Export All is not scoped to filtered row count.
 
-**Status:** Open
+**Status:** Accepted
+
+---
+
+---
+Dual export buttons produce inconsistent CSVs (re-review)
+
+Risk Level: HIGH  
+File Path: src/pages/events/dashboard/index.tsx  
+Lines: 129-137
+
+**Re-review:** ✅ **Fixed** — column parity with server export. Row scope differs by design (**Export Event** = page/selection, **Export All** = full table — **Accepted**).
+
+**Status:** ✅ Fixed
 
 ---
 
 ## Positive notes
 
-- Shared `TableExportButton` + `useTableExport` + `TABLE_EXPORT_KEYS` / `PAGE_TABLE_EXPORT_KEY` — good DRY wiring across seven dashboards.
-- `apiClient.postBlob` correctly bypasses JSON response interceptor for successful blob responses; `resolveTableExportErrorMessage` parses blob error bodies for 403/4xx.
-- `downloadBlob` + `resolveContentDispositionFileName` reuse pattern suitable for future file downloads.
-- `suppressSuccessToast: true` on export POST avoids spurious success toasts.
-- Edit-request toolbar integration is minimal and consistent with other pages.
-- Protected table-control modules untouched; list pages still use `useServerTableControls` + `applyServerSort` + hidden pagination + `PaginationBar`.
+- Shared `TableExportButton` + `useTableExport` + `PAGE_TABLE_EXPORT_KEY` across seven dashboards.
+- Clear UX pairing: **Export X** (current view) + **Export All** (full server dump).
+- Robust blob/JSON error handling for `TABLE_EXPORT_TOO_MANY_ROWS`.
+- Protected table-control modules untouched.
 
 ---
 
@@ -161,8 +115,8 @@ Pass `disabled={total === 0}` from parent pages (based on filtered `total`, not 
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Export All does not send active table filters | HIGH | Open | src/api/services/tableExportService.ts | 40-44 |
-| 2 | Dual export buttons produce inconsistent CSVs | HIGH | Open | src/pages/events/dashboard/index.tsx | 129-137 |
-| 3 | Export All enabled when filtered list is empty | MEDIUM | Open | src/components/table-export-button.tsx | 11-26 |
+| 1 | Export All does not send active table filters | HIGH | Accepted | src/api/services/tableExportService.ts | 103 |
+| 2 | Export All enabled when filtered list is empty | MEDIUM | Accepted | src/components/table-export-button.tsx | 17 |
+| 3 | Dual export CSV column mismatch | HIGH | ✅ Fixed | src/pages/events/dashboard/index.tsx | 129-137 |
 
-**Merge readiness:** **Not merge-ready** — 2 open High and 1 open Medium finding; coordinate with backend filter/column fixes.
+**Merge readiness:** **Blocked on backend** — frontend has no open findings; resolve `BaseController.badRequest` regression (`SKSH-274` backend finding #2) before merge.
