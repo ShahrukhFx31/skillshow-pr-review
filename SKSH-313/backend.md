@@ -3,7 +3,7 @@
 **Repo:** skillshow (main API)  
 **Branch:** `SKSH-313`  
 **Base:** `main...HEAD` @ `b63c391`  
-**Re-verified:** 2026-06-08  
+**Re-verified:** 2026-06-08 (@ `b63c391`, unchanged since prior review)  
 **Scope:** Event view crew CRUD + server-driven sort/pagination for event athletes, crew, and mapped videos; event-scoped `limit` ↔ `pageSize` alias (Critical & High only)  
 **Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 

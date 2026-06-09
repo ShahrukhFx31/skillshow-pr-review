@@ -2,7 +2,7 @@
 
 **Repo:** skillshow-admin-ui  
 **Branch:** `SKSH-313`  
-**Base:** `main...HEAD` @ `c3c73a14`  
+**Base:** `main...HEAD` @ `de4d86a2`  
 **Re-verified:** 2026-06-08  
 **Scope:** Event view crew management (list/add/remove), server sort/pagination for athletes/crew/videos sub-tables (Critical, High, Medium only)  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
@@ -21,7 +21,7 @@ No changes to `use-server-table-controls.ts`, `pagination-bar.tsx`, `use-paginat
 
 ### 1. `src/pages/events/onboarding/components/event-view/event-view-related-table.tsx` line 35
 
-**Medium (Global consistency):** `sortBy`/`sortOrder` are passed from the section but unused here — please pass them into column builders and set per-column `sortOrder` (video-library pattern).
+**Medium (Global consistency):** Server sort works via `applyServerSort`, but column defs still lack controlled `sortOrder` — pass `sortBy`/`sortOrder` from the section into column builders (video-library `columnSortOrder` pattern) so headers reflect active sort after tab switches.
 
 ---
 
@@ -63,22 +63,24 @@ Event view tables omit controlled column `sortOrder` (Global consistency)
 Risk Level: MEDIUM  
 File Path: src/pages/events/onboarding/components/event-view/event-view-related-table.tsx  
 Lines: 35-91  
+File Path: src/pages/events/onboarding/components/event-view/event-view-related-columns.tsx  
+Lines: 32-86  
 File Path: src/pages/events/onboarding/constants.ts  
-Lines: 96-145
+Lines: 138-190
 
 Description:
-**Global consistency:** Server sort state (`sortBy`, `sortOrder`) is passed from `event-view-related-section.tsx` into `EventViewRelatedTable`, but the table component does **not** destructure or use those props; column defs only set `sorter: true` without per-column `sortOrder`. Elsewhere (e.g. `video-library-columns.tsx`) columns use a `columnSortOrder` helper so Ant Table shows the active sort direction after tab switches and refetches.
+**Global consistency:** Server sort state lives in `useServerTableControls` and flows to API via `use-event-view-related-lists`, but Ant Table column defs only set `sorter: true` without per-column `sortOrder`. Elsewhere (`video-library-columns.tsx`) a `columnSortOrder` helper binds header arrows to server `sortBy`/`sortOrder`.
 
-**Developer “already fixed” claim (re-checked @ `c3c73a14`, 2026-06-08):** **Not verified on branch.** The PR enables `showSorterTooltip` on the three `Table` instances (hover tooltip only). That is not controlled `sortOrder` on columns. `buildEventViewAthleteColumns` / `buildEventViewCrewColumns` still take no `sortBy`/`sortOrder` args; `EVENT_VIEW_*_COLUMNS` have no `sortOrder` field. After switching tabs, header arrows will not reflect server sort until the user clicks a column again.
+**Re-verification (@ `de4d86a2`):** Commit `de4d86a2` removes unused `sortBy`/`sortOrder` props from `EventViewRelatedTable` (they were never consumed) — that cleans types but does **not** add controlled column `sortOrder`. `buildEventViewAthleteColumns` / `buildEventViewCrewColumns` still take no sort args; `EVENT_VIEW_*_COLUMNS` have no `sortOrder` field. `showSorterTooltip` enables hover tooltips only.
 
 Impact:
-- Sorting works server-side but column headers do not reflect active sort; users cannot see which column/direction is applied without inferring from data order.
+- Sorting works server-side but column headers do not reflect active sort after tab switch or initial load; users cannot see which column/direction is applied without inferring from data order.
 
 Recommendation:
-Pass `sortBy` / `sortOrder` into column builders (or map `EVENT_VIEW_*_COLUMNS` with a shared `columnSortOrder` helper) so each sortable column sets `sortOrder` when it matches the active server sort — same as `video-library-columns.tsx`.
+Pass `sortBy` / `sortOrder` from `event-view-related-section.tsx` into column builders and set `sortOrder: columnSortOrder(key, sortBy, sortOrder)` on each sortable column — same pattern as `video-library-columns.tsx`.
 
 **PR comment (`event-view-related-table.tsx` line 35):**  
-**Medium (Global consistency):** `sortBy`/`sortOrder` are passed from the section but unused here — please pass them into column builders and set per-column `sortOrder` (video-library pattern). `showSorterTooltip` alone does not show the active server sort in headers.
+**Medium (Global consistency):** Server sort is wired, but columns still lack controlled `sortOrder` — pass sort state into column builders (`columnSortOrder` pattern) so headers show the active sort after tab changes. Removing unused table props (`de4d86a2`) does not fix header indicators.
 
 **Status:** Open
 
@@ -96,7 +98,7 @@ Lines: 1-62
 Description:
 **DRY.** `c3c73a14` extracts `EventViewAddRelatedModal` + `useEventViewAddRelatedModal`; athlete and crew modals are thin wrappers passing service fns, query keys, and copy constants.
 
-**Re-verification (@ `c3c73a14`):** Shared debounce, available search, and add mutation live in one place.
+**Re-verification (@ `de4d86a2`):** Unchanged; shared modal/hook still in place.
 
 **Status:** ✅ Fixed
 
@@ -110,7 +112,7 @@ File Path: src/pages/events/onboarding/components/event-view/event-view-related-
 Lines: 1-22
 
 Description:
-Backend supports crew `designation`/`status` filters, but the event view had a non-functional filter dropdown. **Re-verification (@ `c3c73a14`):** Filter control removed from `EventViewRelatedActions` (search-only toolbar); `filterOpen` props dropped from section — no misleading filter affordance.
+Backend supports crew `designation`/`status` filters, but the event view had a non-functional filter dropdown. **Re-verification (@ `de4d86a2`):** Filter control removed from `EventViewRelatedActions` (search-only toolbar); no misleading filter affordance.
 
 **Status:** ✅ Fixed
 
@@ -121,20 +123,20 @@ Backend supports crew `designation`/`status` filters, but the event view had a n
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 | 1 | Unrelated dashboard card subtitles removed | HIGH | Accepted | src/pages/management/app-users/dashboard/index.tsx | 101-109 |
-| 2 | Event view tables omit controlled column `sortOrder` | MEDIUM | Open | src/pages/events/onboarding/components/event-view/event-view-related-table.tsx | 19-36, 51-91 |
+| 2 | Event view tables omit controlled column `sortOrder` | MEDIUM | Open | src/pages/events/onboarding/components/event-view/event-view-related-table.tsx | 35-91 |
 | 3 | Add Crew modal duplicates Add Athlete modal | MEDIUM | ✅ Fixed | src/pages/events/onboarding/components/event-view/event-view-add-related-modal.tsx | 1-78 |
 | 4 | Backend crew filters exist; filter UI placeholder | MEDIUM | ✅ Fixed | src/pages/events/onboarding/components/event-view/event-view-related-actions.tsx | 1-22 |
 
-### Re-review notes (2026-06-08)
+### Re-review notes (2026-06-08 @ `de4d86a2`)
 
 | Change | Verdict |
 |--------|---------|
+| `de4d86a2` remove unused `sortBy`/`sortOrder` table props | Cleanup only — **does not fix** column header indicators |
 | `c3c73a14` shared add-related modal/hook | **Fixed** DRY finding |
 | Filter dropdown removed from related actions | **Fixed** placeholder filter finding |
-| `b63c391` backend `crewNameSort` | Backend sort contract aligned (see backend.md) |
-| Developer claim: controlled column `sortOrder` fixed | **Not on `c3c73a14`** — only `showSorterTooltip` added; props still unused |
-| Dashboard `Typography` titles removed (incl. Events dashboard) | **Accepted** — intentional cleanup per team |
+| Dashboard `Typography` titles removed | **Accepted** per team |
+| Backend `b63c391` `crewNameSort` | See [backend.md](./backend.md) — all backend findings fixed |
 
-**Positive notes:** Event related section uses `useServerTableControls`, `applyServerSort`, `PaginationBar`, and `DestructiveActionConfirmModal`; tab switch resets search and per-tab default sort; crew CRUD API-driven; mock crew rows removed.
+**Positive notes:** Event related section uses `useServerTableControls`, `applyServerSort`, `PaginationBar`, and `DestructiveActionConfirmModal`; tab switch resets search and per-tab default sort; crew CRUD API-driven; mock crew rows removed; shared add-related modal reduces duplication.
 
-**Merge readiness:** **Not merge-ready** — 1 open Medium on frontend (`sortOrder` column indicators). Backend has no open blockers.
+**Merge readiness:** **Not merge-ready** — 1 open Medium on frontend (controlled column `sortOrder`). Backend has no open blockers.
