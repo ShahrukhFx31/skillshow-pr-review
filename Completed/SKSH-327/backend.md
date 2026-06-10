@@ -2,8 +2,9 @@
 
 **Repo:** skillshow  
 **Branch:** `sksh-327`  
-**Base:** `main...HEAD` @ `6988c13`  
+**Base:** `main...HEAD` @ `8f6e928`  
 **Initial review:** 2026-06-09  
+**Re-review:** 2026-06-09  
 **Scope:** Align linked-athlete play-url access with view-only linked video contract (`getLinkedVideo`); remove redundant `findLinkedVideoKey` helper (Critical / High only)  
 **Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
@@ -22,6 +23,7 @@ No list endpoints, bulk row ops, audit logs, or change streams in this diff.
 | File | Change |
 |------|--------|
 | `src/services/athlete.service.ts` | `getLinkedEncryptedPlayUrl` uses view access path; `findLinkedVideoKey` removed |
+| `src/services/edit-request.service.ts` | Formatting-only line wraps (no behavior change; merge artifact) |
 
 ### DRY / KISS / Reusability / Global consistency scan
 
@@ -60,4 +62,4 @@ No Critical or High findings.
 |---|--------|------|--------|------|-------|
 | — | No Critical or High findings | — | — | — | — |
 
-**Merge readiness:** No open Critical/High blockers. Backend change is a focused contract fix aligned with `getLinkedVideo`; safe to merge from a backend review perspective. Consider adding a unit test mirroring `getLinkedVideo hides private videos from parent/coach` for `getLinkedEncryptedPlayUrl` in a follow-up (optional hardening, not a merge blocker).
+**Merge readiness:** No open Critical/High blockers. Backend change is a focused contract fix aligned with `getLinkedVideo`; safe to merge.
