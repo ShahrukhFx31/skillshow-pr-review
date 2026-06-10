@@ -40,7 +40,6 @@ Folders under `pr-review/{TICKET}/` (not yet in `Completed/`).
 
 | Ticket   | Reports |
 |----------|---------|
-| SKSH-265 | `frontend.md`, `backend.md` |
 | SKSH-274 | `frontend.md`, `backend.md` |
 
 ## Completed tickets
@@ -52,6 +51,7 @@ Archived under `pr-review/Completed/` when all findings are **Fixed** or **Accep
 | SKSH-101 | `frontend.md`, `backend.md` |
 | SKSH-116 | `frontend.md`, `backend.md` |
 | SKSH-137 | `frontend.md`, `backend.md` |
+| SKSH-153 | `frontend.md` |
 | SKSH-168 | `frontend.md` |
 | SKSH-178 | `frontend.md`, `backend.md` |
 | SKSH-181 | `frontend.md`, `backend.md` |
@@ -60,22 +60,30 @@ Archived under `pr-review/Completed/` when all findings are **Fixed** or **Accep
 | SKSH-243 | `frontend.md` |
 | SKSH-258 | `frontend.md` |
 | SKSH-261 | `backend.md` |
+| SKSH-264 | `frontend.md`, `backend.md` |
+| SKSH-265 | `frontend.md`, `backend.md` |
 | SKSH-267 | `frontend.md`, `backend.md`, `orchestrator.md` |
 | SKSH-268 | `frontend.md` |
+| SKSH-271 | `frontend.md`, `backend.md` |
+| SKSH-273 | `frontend.md`, `backend.md` |
 | SKSH-277 | `frontend.md`, `backend.md` |
 | SKSH-278 | `frontend.md`, `backend.md` |
 | SKSH-279 | `frontend.md` |
 | SKSH-281 | `frontend.md`, `backend.md` |
+| SKSH-288 | `frontend.md` |
 | SKSH-294 | `frontend.md`, `backend.md` |
 | SKSH-295 | `frontend.md`, `backend.md` |
+| SKSH-296 | `frontend.md`, `backend.md` |
 | SKSH-297 | `frontend.md`, `backend.md` |
 | SKSH-302 | `frontend.md` |
-| SKSH-305 | `frontend.md`, `backend.md` |
-| SKSH-312 | `frontend.md`, `backend.md` |
-| SKSH-271 | `frontend.md`, `backend.md` |
-| SKSH-273 | `frontend.md`, `backend.md` |
 | SKSH-303 | `frontend.md`, `backend.md` |
-| SKSH-315 | `frontend.md` |
-| SKSH-317 | `frontend.md` |
+| SKSH-305 | `frontend.md`, `backend.md` |
 | SKSH-307 | `frontend.md`, `backend.md` |
 | SKSH-311 | `frontend.md`, `backend.md` |
+| SKSH-312 | `frontend.md`, `backend.md` |
+| SKSH-313 | `frontend.md`, `backend.md` |
+| SKSH-315 | `frontend.md` |
+| SKSH-317 | `frontend.md` |
+| SKSH-320 | `backend.md` |
+| SKSH-326 | `frontend.md` |
+| SKSH-327 | `frontend.md`, `backend.md` |

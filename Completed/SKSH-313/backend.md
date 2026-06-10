@@ -2,8 +2,8 @@
 
 **Repo:** skillshow (main API)  
 **Branch:** `SKSH-313`  
-**Base:** `main...HEAD` @ `02bfc084`  
-**Re-verified:** 2026-06-08  
+**Base:** `main...HEAD` @ `4293aec`  
+**Re-verified:** 2026-06-08 (@ `4293aec`, merge-only since prior review — no new code findings)  
 **Scope:** Event view crew CRUD + server-driven sort/pagination for event athletes, crew, and mapped videos; `getEventByRef` + `buildEventRefQueryFilter` (Critical & High only)  
 **Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
@@ -73,7 +73,7 @@ Handler uses `validatedQuery` only.
 | 2 | Crew name sort uses `firstName` only | HIGH | ✅ Fixed | src/repositories/event-crew.repository.ts | 53-70 |
 | 3 | `listEventCrewAvailable` reads raw `req.query` fallback | HIGH | ✅ Fixed | src/controllers/event.controller.ts | 236-237 |
 
-### Re-review notes (2026-06-08 @ `02bfc084`)
+### Re-review notes (2026-06-08 @ `4293aec`)
 
 | Change | Verdict |
 |--------|---------|
@@ -81,8 +81,8 @@ Handler uses `validatedQuery` only.
 | `findActiveByRef` → `findOneByRef` | DRY improvement in repository |
 | Prior crew/list contract fixes | Unchanged on branch |
 
-**Note:** Frontend `432529b2` now fetches all athlete/crew pages client-side — server list endpoints remain correct but see [frontend.md](./frontend.md) for consumer scalability concern.
+**Note:** Frontend `fetchAllEventRelatedList` for athletes/crew — **Accepted** per team (see [frontend.md](./frontend.md)).
 
 **Positive notes:** Event crew layering; `createEventListQuerySchema` + `runListQueryAggregate`; auth + `validate()` on routes; crew service tests; swagger updated.
 
-**Merge readiness:** **No open Critical/High blockers on the backend diff.**
+**Merge readiness:** **No open Critical/High blockers** — ticket review complete.
