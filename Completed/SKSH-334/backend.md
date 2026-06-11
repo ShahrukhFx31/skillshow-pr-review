@@ -2,8 +2,9 @@
 
 **Repo:** skillshow (main API) — `https://github.com/fx31labs-mvp/skillshow.git`  
 **Branch:** `SKSH-334`  
-**Base:** `main...HEAD` @ `67255dc`  
+**Base:** `main...HEAD` @ `43d4ffe`  
 **Initial review:** 2026-06-10  
+**Re-reviewed:** 2026-06-10 (`43d4ffe` — merge-only since prior review; no new code findings)  
 **Scope:** Relax platform event assignment on video PATCH — allow self-upload without athlete profile; coach/parent self-uploads; share-path permission guard only when `viewerUserId !== ownerUserId` (Critical & High only)  
 **Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
@@ -39,7 +40,7 @@ No list endpoints, bulk row ops, audit logs, or change streams in this diff.
 
 - **Behavior fix:** Athlete-role users can assign a platform event on their own upload before completing account-general (no athlete row required). Test asserts profile stays `null` after assignment (`event-athlete.service.test.ts:176-177`).
 - **Role coverage:** Coach and parent self-uploads now succeed; previously blocked by mandatory `findIdByUserId` profile check.
-- **Share path:** Cross-user assignment still requires athlete profile (auto-provisioned via `ensureAthleteIdForUser` when owner has athlete role) and share permission; non-athlete owners on share path get `403` with `EVENT_PLATFORM_VIDEO_SHARE_FORBIDDEN_MESSAGE` — clearer than the removed `400` athlete-profile-required path.
+- **Share path:** Cross-user assignment still requires athlete profile (auto-provisioned via `ensureAthleteIdForUser` when owner has athlete role) and share permission; non-athlete owners on share path get `403` with `EVENT_PLATFORM_VIDEO_SHARE_FORBIDDEN_MESSAGE`.
 - **Tests:** Two focused integration cases cover the ticket’s core scenarios.
 - **Optional cleanup (out of scope):** `EVENT_PLATFORM_ATHLETE_PROFILE_REQUIRED_MESSAGE` in `event.constants.ts` is now unused; safe to remove in a follow-up.
 
