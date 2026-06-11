@@ -6,7 +6,7 @@
 **Scope:** Events dashboard event-type filter refactor; event view related section Edit/Done toggle; move related section outside `Form`; incidental account tabs scrollbar class change  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
-**Findings:** 4 in scope (0 Critical, 2 High, 2 Medium) — **3 Open**, **1 Accepted**
+**Findings:** 4 in scope (0 Critical, 2 High, 2 Medium) — **2 Open**, **2 Accepted**
 
 ### Protected modules
 
@@ -41,7 +41,7 @@
 | Related section moved outside disabled `Form` (tables were never form fields) | ✅ |
 | `DestructiveActionConfirmModal` for removals | ✅ Contract |
 | Done toggle unmounts modals without clearing open/pending state | ⚠️ See #1 |
-| Event **edit** route now requires extra Edit click for roster mutations | ⚠️ See #2 |
+| Event **edit** route now requires extra Edit click for roster mutations | ✅ Accepted (#2) — intentional Edit/Done on all routes |
 | Account tabs `scrollbar-none` vs established `scrollbar-hide` / `[scrollbar-width:none]` | ⚠️ See #3 |
 | Unrelated account change bundled in events ticket | ✅ Accepted (#4) |
 
@@ -53,11 +53,7 @@
 
 **PR comment (line 185):** **High:** Clicking Done unmounts add/remove modals but leaves `addAthleteOpen`, `addCrewOpen`, `athleteToRemove`, and `crewToRemove` set. Re-entering Edit can immediately reopen a modal or confirm dialog. Reset those four states when `isTablesEditing` becomes `false` (in the toggle handler or a `useEffect`).
 
-### 2. `src/pages/events/onboarding/components/event-view/event-view-related-section.tsx` line 54
-
-**PR comment (line 54):** **High:** `isTablesEditing` defaults to `false` on the event **edit** route too. Previously `readOnly={isView}` meant roster tables were editable immediately on `/edit` but read-only on `/view`. Consider `defaultTablesEditing={isEdit}` from the parent (or `useState(isEdit)`) so the edit route keeps one-click roster access while view still uses Edit/Done.
-
-### 3. `src/pages/user/account/index.tsx` line 115
+### 2. `src/pages/user/account/index.tsx` line 115
 
 **PR comment (line 115):** **Medium:** `scrollbar-none` is not a defined utility in this repo (`scrollbar-hide` is in `global.css`; siblings use `[scrollbar-width:none]`). This likely stops hiding the Firefox scrollbar on account tabs. Revert to `[scrollbar-width:none]` or use `scrollbar-hide`.
 
@@ -103,6 +99,8 @@ onClick={() => (isTablesEditing ? exitTablesEditing() : setIsTablesEditing(true)
 ---
 Event edit route regresses to two-step roster editing
 
+**Status: Accepted** — intentional: roster tables use the same Edit/Done gate on view and edit routes for consistent, explicit edit mode.
+
 Risk Level: HIGH  
 File Path: src/pages/events/onboarding/components/event-view/event-view-related-section.tsx  
 Lines: 54-55
@@ -115,24 +113,9 @@ Impact:
 - Inconsistent with user expectation that "edit event" enables all editable surfaces
 
 Recommendation:
-Pass page mode from parent and initialize editing accordingly:
+No code change required. Accepted as deliberate UX: form edit and roster edit remain separate, with explicit Edit/Done on the related section across routes.
 
-```tsx
-// types.ts
-defaultTablesEditing?: boolean;
-
-// event-view-related-section.tsx
-const [isTablesEditing, setIsTablesEditing] = useState(defaultTablesEditing ?? false);
-
-// index.tsx
-<EventViewRelatedSection
-  defaultTablesEditing={isEdit}
-  eventRouteId={eventId}
-  registeredAthleteCount={loadedEventRow.athletes}
-/>
-```
-
-**PR comment (line 54):** **High:** Default `isTablesEditing` to `true` on edit route to preserve prior behavior.
+**GitHub comment:** None required — accepted as intentional.
 
 ---
 
@@ -199,8 +182,8 @@ No code change required. Revert or split only if the team later wants stricter P
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 | 1 | Done toggle leaves stale modal and confirm state | HIGH | Open | src/pages/events/onboarding/components/event-view/event-view-related-section.tsx | 54-59, 185-187, 273-321 |
-| 2 | Event edit route regresses to two-step roster editing | HIGH | Open | src/pages/events/onboarding/components/event-view/event-view-related-section.tsx | 54-55 |
+| 2 | Event edit route regresses to two-step roster editing | HIGH | Accepted | src/pages/events/onboarding/components/event-view/event-view-related-section.tsx | 54-55 |
 | 3 | Invalid scrollbar utility on account tabs | MEDIUM | Open | src/pages/user/account/index.tsx | 115 |
 | 4 | Unrelated account change in events ticket PR | MEDIUM | Accepted | src/pages/user/account/index.tsx | 115 |
 
-**Merge readiness:** **Not merge-ready** — fix High #1 (stale modal state) and High #2 (edit-route default) before merge; address Medium #3 (scrollbar utility) or revert to `[scrollbar-width:none]` / `scrollbar-hide`.
+**Merge readiness:** **Not merge-ready** — fix High #1 (stale modal state) before merge; address Medium #3 (scrollbar utility) or revert to `[scrollbar-width:none]` / `scrollbar-hide`.
