@@ -2,62 +2,60 @@
 
 **Repo:** skillshow — `https://github.com/fx31labs-mvp/skillshow.git`  
 **Branch:** `SKSH-337`  
-**Base:** `main...HEAD` @ `6e30b55`  
+**Base:** `main...HEAD` @ `2068566`  
 **Initial review:** 2026-06-11  
-**Scope:** Crew dashboard assigned-events list endpoint (`GET /api/v1/edit-requests/crew/assigned-events`) + crew query limit validation alignment (Critical / High only)  
+**Re-reviewed:** 2026-06-11 (`2068566` — feedback: protected module revert, crew limit cap, search/sort)  
+**Scope:** Crew dashboard assigned-events list (`GET /api/v1/edit-requests/crew/assigned-events`) with search/sort + shared crew pagination utils (Critical / High only)  
 **Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
 **Aligned with:** [frontend.md](./frontend.md)
 
-**Findings:** 2 (1 Critical, 1 High) — **2 Open**
+**Findings:** 2 (0 Critical, 0 High) — **0 Open**, **2 Fixed**
 
 ### Protected modules
 
 | Module | Status |
 |--------|--------|
-| `list-query.validation.ts` | **Modified** — whitespace-only reformat (see #1) |
+| `list-query.validation.ts` | **Not modified** ✅ (reverted since initial review) |
 | `list-query-aggregation.utils.ts`, audit-log modules, change-stream modules | Not modified |
 
 ### Files reviewed
 
 | File | Change |
 |------|--------|
+| `src/constants/event.constants.ts` | Assigned-events sort map, search fields |
 | `src/controllers/edit-request.controller.ts` | `getCrewAssignedEvents` handler |
-| `src/repositories/event-crew.repository.ts` | `listAssignedEventsForCrewUser` aggregate |
+| `src/repositories/event-crew.repository.ts` | `listAssignedEventsForCrewUser` with search/sort aggregate |
 | `src/routes/edit-request.routes.ts` | `GET /crew/assigned-events` route |
-| `src/services/edit-request-crew-dashboard.service.ts` | `getAssignedEvents`, `parsePagination`, row mapper |
+| `src/services/edit-request-crew-dashboard.service.ts` | `getAssignedEvents`, dashboard limit via shared util |
+| `src/services/edit-request-crew-performance-reviews.service.ts` | Delegates to `parseCrewPaginatedListQuery` |
+| `src/types/edit-request/crew-query.types.ts` | `CrewAssignedEventsListQuery` (search/sort) |
 | `src/types/edit-request/crew-dashboard.types.ts` | Assigned-events DTOs |
-| `src/validation/edit-request.validation.ts` | `crewAssignedEventsQuerySchema`; limit max → 100 on crew schemas |
-| `src/validation/list-query.validation.ts` | Whitespace reformat of `listQueryOptionalLimitField` |
+| `src/utils/crew-list-query.utils.ts` | **New** shared crew pagination + list-query parsing |
+| `src/validation/edit-request.validation.ts` | `crewAssignedEventsQuerySchema` (page/limit/search/sort) |
 
 ### DRY / KISS / Reusability / Global consistency scan
 
 | Check | Verdict |
 |-------|---------|
-| New endpoint follows controller → service → repository layering | ✅ |
-| `runListQueryAggregate` + event `$lookup` reuse established event-crew patterns | ✅ |
-| Crew auth via `assertCrewDashboardActor` / `shouldScopeAdminEditRequestsToAssignedEditor` | ✅ |
-| `parsePagination` added to dashboard service (duplicate of performance-reviews service) | ⚠️ Accepted — same pattern as sibling crew service |
-| Validation `limit` max raised to `LIST_QUERY_PAGINATION.MAX_PAGE_SIZE` (100) on crew schemas | ❌ Service still caps at `PAGINATION.MAX_LIMIT` (25) — see #2 |
-| Protected `list-query.validation.ts` touched for unrelated formatting | ❌ See #1 |
+| `parseCrewPaginatedListQuery` / `parseCrewAssignedEventsListQuery` — single crew pagination source | ✅ DRY |
+| Performance-reviews service migrated to shared util | ✅ Global consistency |
+| `runListQueryAggregate` + `buildRegexOrMatch` for assigned events | ✅ Contract |
+| Validation + service both use `LIST_QUERY_PAGINATION.MAX_PAGE_SIZE` (100) | ✅ Fixed (#2) |
+| Protected `list-query.validation.ts` untouched | ✅ Fixed (#1) |
+| Sort allow-list aligned with frontend column keys + `createdAt` | ✅ |
 
 ### Positive notes
 
-- **Repository design:** `listAssignedEventsForCrewUser` joins assignments → events, filters `eventDoc.isDeleted: false`, and projects lifecycle status with `EVENT_DEFAULT_LIFECYCLE_STATUS` fallback.
-- **Response shape:** DTO maps `endDate` → `dueDate` and formats dates via `formatEventDateForDto`, aligned with frontend column labels.
-- **Auth:** Route uses `adminRead` + Joi validation + same forbidden-message handling as other crew dashboard endpoints.
+- **Shared util:** `crew-list-query.utils.ts` centralizes crew pagination caps (`LIST_QUERY_PAGINATION`) and removes duplicate `parsePagination` from dashboard/performance-reviews services.
+- **List contract:** Assigned-events endpoint supports `search`, `sortBy`, `sortOrder` with escaped regex search and `CREW_ASSIGNED_EVENTS_LIST_SORT_FIELD_MAP`.
+- **Repository:** Joins assignments → events, filters deleted events, projects lifecycle status with default fallback.
 
 ---
 
 ## GitHub comments
 
-### 1. `src/validation/list-query.validation.ts` line 34
-
-**PR comment (line 34):** **Critical (Protected module):** This PR reformats `listQueryOptionalLimitField` in the frozen `list-query.validation.ts` module. Please revert this whitespace-only change; crew limit updates belong in `edit-request.validation.ts` only.
-
-### 2. `src/validation/edit-request.validation.ts` line 337
-
-**PR comment (line 337):** **High (Contract):** `crewAssignedEventsQuerySchema` (and sibling crew schemas) now allow `limit` up to `LIST_QUERY_PAGINATION.MAX_PAGE_SIZE` (100), but `parsePagination` / `getDashboard` still clamp to `PAGINATION.MAX_LIMIT` (25). Clients can pass `limit=50`, pass validation, and receive only 25 rows with mismatched pagination metadata. Align service caps with validation (use `LIST_QUERY_PAGINATION` constants) or revert validation max to 25.
+_No open findings — prior comments resolved on branch._
 
 ---
 
@@ -67,21 +65,20 @@
 Protected module changed (list-query.validation.ts)
 
 Risk Level: CRITICAL  
-**Status:** Open  
+**Status:** ✅ Fixed  
 File Path: skillshow/src/validation/list-query.validation.ts  
 Lines: 34-36
 
 Description:
-**Protected module.** The PR modifies `list-query.validation.ts`, a frozen shared module. The diff only collapses `listQueryOptionalLimitField` from a multi-line Joi chain to a single line — no functional change — but the file is outside SKSH-337 scope.
+**Protected module.** Initial review flagged a whitespace-only reformat of `listQueryOptionalLimitField` in the frozen `list-query.validation.ts` module.
 
 Impact:
-- Unrelated churn in a shared validation module increases merge conflict risk on list-query work.
-- Violates the protected-module contract (changes should be scoped to dedicated tickets).
+- Unrelated churn in a shared validation module.
 
 Recommendation:
-Revert the `list-query.validation.ts` hunk entirely. Keep all crew limit changes in `edit-request.validation.ts` (already correct location).
+Revert the `list-query.validation.ts` hunk — crew limit changes belong in `edit-request.validation.ts` only.
 
-**PR comment (`list-query.validation.ts` line 34):** **Critical (Protected module):** This PR reformats `listQueryOptionalLimitField` in the frozen `list-query.validation.ts` module. Please revert this whitespace-only change; crew limit updates belong in `edit-request.validation.ts` only.
+**Re-review evidence:** `list-query.validation.ts` no longer appears in `main...HEAD` diff. Import of `LIST_QUERY_PAGINATION` / `LIST_QUERY_DEFAULTS` from that module in `crew-list-query.utils.ts` is read-only consumption.
 
 ---
 
@@ -89,45 +86,20 @@ Revert the `list-query.validation.ts` hunk entirely. Keep all crew limit changes
 Crew query limit validation vs service cap mismatch
 
 Risk Level: HIGH  
-**Status:** Open  
-File Path: skillshow/src/validation/edit-request.validation.ts  
-Lines: 329-343
+**Status:** ✅ Fixed  
+File Path: skillshow/src/utils/crew-list-query.utils.ts  
+Lines: 12-23
 
 Description:
-**Contract / Global consistency.** This PR changes `crewDashboardQuerySchema`, `crewAssignedEventsQuerySchema`, and `crewPerformanceReviewsQuerySchema` to use `listQueryOptionalLimitField(LIST_QUERY_PAGINATION.MAX_PAGE_SIZE)` (max **100**). Service-layer pagination in `edit-request-crew-dashboard.service.ts` and `edit-request-crew-performance-reviews.service.ts` still clamps with `PAGINATION.MAX_LIMIT` (**25**):
-
-```52:58:skillshow/src/services/edit-request-crew-dashboard.service.ts
-  private parsePagination(query: CrewPaginatedListQuery = {}) {
-    const page = Math.max(1, query.page ?? 1);
-    const limit = Math.min(
-      PAGINATION.MAX_LIMIT,
-      Math.max(1, query.limit ?? PAGINATION.DEFAULT_LIMIT)
-    );
-    return { page, limit };
-  }
-```
-
-`getDashboard` applies the same `PAGINATION.MAX_LIMIT` clamp at line 258-261.
+**Contract.** Initial review flagged Joi validation allowing `limit` up to 100 while services still clamped with `PAGINATION.MAX_LIMIT` (25).
 
 Impact:
-- API accepts `limit` 26–100 but silently returns at most 25 rows; `pagination.limit` in the response reflects the clamped value while clients may believe a higher limit was honored.
-- Frontend `PaginationBar` exposes page sizes up to 100 (`PAGE_SIZE_OPTIONS`); selecting 50 or 100 will not match row count (see frontend.md #1).
+- Clients could pass `limit` 26–100, pass validation, and receive at most 25 rows.
 
 Recommendation:
-Align service caps with validation — replace `PAGINATION.MAX_LIMIT` with `LIST_QUERY_PAGINATION.MAX_PAGE_SIZE` in crew `parsePagination` paths (and `getDashboard`), and default to `LIST_QUERY_PAGINATION.DEFAULT_PAGE_SIZE` (10) where appropriate:
+Align service caps with validation via `LIST_QUERY_PAGINATION` constants.
 
-```typescript
-import { LIST_QUERY_PAGINATION } from "../validation/list-query.validation";
-
-const limit = Math.min(
-  LIST_QUERY_PAGINATION.MAX_PAGE_SIZE,
-  Math.max(1, query.limit ?? LIST_QUERY_PAGINATION.DEFAULT_PAGE_SIZE)
-);
-```
-
-Alternatively, if 25 is the intended crew cap, revert validation to `listQueryOptionalLimitField()` (default max 25) instead of raising the Joi max to 100.
-
-**PR comment (`edit-request.validation.ts` line 337):** **High (Contract):** `crewAssignedEventsQuerySchema` (and sibling crew schemas) now allow `limit` up to `LIST_QUERY_PAGINATION.MAX_PAGE_SIZE` (100), but `parsePagination` / `getDashboard` still clamp to `PAGINATION.MAX_LIMIT` (25). Clients can pass `limit=50`, pass validation, and receive only 25 rows with mismatched pagination metadata. Align service caps with validation (use `LIST_QUERY_PAGINATION` constants) or revert validation max to 25.
+**Re-review evidence:** `parseCrewPaginatedListQuery` and `parseCrewDashboardListLimit` now clamp with `LIST_QUERY_PAGINATION.MAX_PAGE_SIZE` (100). `edit-request-crew-performance-reviews.service.ts` delegates to the shared util.
 
 ---
 
@@ -135,7 +107,7 @@ Alternatively, if 25 is the intended crew cap, revert validation to `listQueryOp
 
 | # | Title | Risk | Status | File | Lines | PR comment line |
 |---|--------|------|--------|------|-------|-----------------|
-| 1 | Protected module changed (list-query.validation.ts) | CRITICAL | Open | skillshow/src/validation/list-query.validation.ts | 34-36 | 34 |
-| 2 | Crew query limit validation vs service cap mismatch | HIGH | Open | skillshow/src/validation/edit-request.validation.ts | 329-343 | 337 |
+| 1 | Protected module changed (list-query.validation.ts) | CRITICAL | ✅ Fixed | skillshow/src/validation/list-query.validation.ts | 34-36 | — |
+| 2 | Crew query limit validation vs service cap mismatch | HIGH | ✅ Fixed | skillshow/src/utils/crew-list-query.utils.ts | 12-23 | — |
 
-**Merge readiness:** **Not merge-ready** — 1 Critical (protected module) + 1 High (pagination contract). Fix before merge.
+**Merge readiness:** **No open backend blockers.** Remaining items are on the frontend report (protected-module scope + default page size).

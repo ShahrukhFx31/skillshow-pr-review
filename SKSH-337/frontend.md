@@ -2,128 +2,157 @@
 
 **Repo:** skillshow-admin-ui — `https://github.com/fx31labs-mvp/skillshow-admin-ui.git`  
 **Branch:** `SKSH-337`  
-**Base:** `main...HEAD` @ `517b3a87`  
+**Base:** `main...HEAD` @ `6baff488`  
 **Initial review:** 2026-06-11  
-**Scope:** Crew dashboard "Recent Assigned Events" section — server-paginated table, API hook, realtime invalidation; performance-reviews page-size tweak (Critical / High / Medium)  
+**Re-reviewed:** 2026-06-11 (`6baff488` — feedback: server-table contract, pagination bar/hidden, limit cap)  
+**Scope:** Crew dashboard assigned-events section (server search/sort/pagination), shared list-pagination hook extraction, edit-request table UX polish (Critical / High / Medium)  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
 **Aligned with:** [backend.md](./backend.md)
 
-**Findings:** 2 (0 Critical, 2 High) — **2 Open**
+**Findings:** 4 (1 Critical, 1 High, 2 Medium) — **1 Critical Open**, **1 High Open**, **2 Fixed**
 
 ### Protected modules
 
 | Module | Status |
 |--------|--------|
-| `pagination-bar.tsx`, `use-pagination.ts`, `use-server-table-controls.ts`, `table-sort.ts`, `destructive-action-confirm-modal.tsx`, `antd.adapter.tsx`, audit-log components | **Not modified** |
+| `pagination-bar.tsx` | **Modified** — optional `pageSizeOptions` prop (see #1) |
+| `use-pagination.ts` | **Modified** — delegates to `useListPaginationBar` (see #1) |
+| `use-server-table-controls.ts` | **Modified** — `initialPageSize` param (see #1) |
+| `table-sort.ts` | **Modified** — `getServerColumnSortOrder` helper (see #1) |
+| `destructive-action-confirm-modal.tsx`, `antd.adapter.tsx`, audit-log components | Not modified |
 
 ### Files reviewed
 
 | File | Change |
 |------|--------|
-| `src/api/services/crewDashboardService.ts` | `getCrewAssignedEvents` |
-| `src/api/types/crew-dashboard.types.ts` | Assigned-events DTOs |
-| `src/constants/queryKeys.ts` | `crewAssignedEventsQueryKey` |
-| `src/pages/dashboard/crew/dashboard/components/assigned-events-*` | Section, table, columns, responsive cards |
-| `src/pages/dashboard/crew/dashboard/components/crew-dashboard-truncated-name.tsx` | Shared truncated name + tooltip |
-| `src/pages/dashboard/crew/dashboard/components/edit-requests-columns.tsx` | Reuse `CrewDashboardTruncatedName` |
-| `src/pages/dashboard/crew/dashboard/hooks/use-crew-assigned-events.ts` | React Query hook |
-| `src/pages/dashboard/crew/dashboard/index.tsx` | Wire `AssignedEventsSection` |
-| `src/pages/dashboard/crew/dashboard/utils/*` | Mappers + name preview util |
-| `src/utils/edit-request-realtime.utils.ts` | Invalidate/refetch assigned-events on socket events |
+| `src/hooks/use-list-pagination-bar.ts` | **New** shared `bar`/`hidden` for server lists |
+| `src/hooks/use-pagination.ts` | Refactor → `useListPaginationBar` |
+| `src/hooks/use-server-table-controls.ts` | `initialPageSize` support |
+| `src/components/pagination-bar.tsx` | Optional `pageSizeOptions` |
+| `src/utils/table-sort.ts` | `getServerColumnSortOrder` |
+| `src/pages/adminEditRequest/hooks/use-admin-edit-request-list-pagination.ts` | Thin wrapper → `useListPaginationBar` |
+| `src/pages/dashboard/crew/dashboard/**` | Assigned-events section, table, columns, hook |
+| `src/utils/edit-request-realtime.utils.ts` | Invalidate/refetch assigned-events |
 | `src/pages/user/account/general/crew/**` | Performance reviews page size 5 → 10 (tangential) |
 
 ### DRY / KISS / Reusability / Global consistency scan
 
 | Check | Verdict |
 |-------|---------|
-| `CrewDashboardTruncatedName` + `crewDashboardNamePreview` reused in edit-requests + assigned-events | ✅ DRY |
-| `EventLifecycleStatusTableTag` for status column | ✅ Reuse |
-| `mapCrewAssignedEvents` colocated with other crew dashboard mappers | ✅ |
-| Realtime utils invalidate/refetch `crewAssignedEventsQueryKey` | ✅ |
-| `usePagination` in section but `hidden`/`bar` re-implemented in table | ❌ Contract — see #1 |
-| `PaginationBar` page sizes up to 100 vs backend service cap 25 | ❌ Cross-stack — see #2 |
-| Protected table/pagination modules untouched | ✅ |
+| `useCrewAssignedEvents` uses `useServerTableControls` + `applyServerSort` + `useListPaginationBar` | ✅ Fixed (prior #1) |
+| `queryKey` includes page, pageSize, search, sortBy, sortOrder | ✅ |
+| Backend limit cap now 100 — `PaginationBar` options aligned | ✅ Fixed (prior #2) |
+| `useListPaginationBar` extracted; `use-pagination` + admin edit-request hook migrated | ✅ DRY |
+| Four frozen table/pagination modules modified in same PR | ❌ Protected scope — see #1 |
+| `CREW_ASSIGNED_EVENTS_PAGE_SIZE` = 5 (`DEFAULT_LIST_PAGINATION`) vs backend default 10 | ❌ Contract — see #2 |
+| Default sort `createdAt` not shown on any column | ⚠️ UX — see #3 (Medium) |
 
 ### Positive notes
 
-- **Feature completeness:** Assigned events section mirrors edit-requests layout (Card + desktop table + mobile responsive cards + `PaginationBar`).
-- **Server pagination:** `useCrewAssignedEvents` passes `page`/`limit` to the API and includes both in `queryKey` — correct cache segmentation.
-- **Realtime:** Socket-driven `invalidateCrewDashboardQueries` / `refetchCrewDashboardQueries` now cover assigned events alongside KPIs and performance reviews.
+- **Contract compliance:** Assigned events now follow the frozen server-table stack (`useServerTableControls`, `applyServerSort`, `useListPaginationBar`, `PaginationBar`) — addresses initial-review feedback.
+- **Search/sort:** Debounced search in card header; server sort wired through column `key` + `getServerColumnSortOrder`.
+- **Realtime:** Socket handlers invalidate/refetch `crewAssignedEventsQueryKey`.
+- **UX polish:** Shared truncation helpers for edit-request title/name columns; tag/status wrapping on mobile cards.
 
 ---
 
 ## GitHub comments
 
-### 1. `src/pages/dashboard/crew/dashboard/components/assigned-events-section.tsx` line 16
+### 1. `src/hooks/use-pagination.ts` line 3
 
-**PR comment (line 16):** **High (Contract):** `usePagination` is called with hardcoded `total: 0`, so only page state is used while `AssignedEventsTable` re-implements hidden Ant pagination + `PaginationBar` props. Derive `bar`/`hidden` from `page`, `pageSize`, API `total`, and `setPage`/`setPageSize` in the section (same pattern as `events-table.tsx`) and pass them to the table instead of duplicating the hidden-pagination config.
+**PR comment (line 3):** **Critical (Protected module):** This PR modifies four frozen table/pagination modules (`pagination-bar.tsx`, `use-pagination.ts`, `use-server-table-controls.ts`, `table-sort.ts`). Changes look backward-compatible, but protected-module edits need explicit ticket scope or a dedicated infra PR. Please confirm SKSH-337 authorizes these shared changes, or split the hook extractions into a separate review.
 
-### 2. `src/pages/dashboard/crew/dashboard/components/assigned-events-table.tsx` line 56
+### 2. `src/pages/dashboard/crew/dashboard/constants.ts` line 9
 
-**PR comment (line 56):** **High (Contract):** `PaginationBar` exposes page sizes up to 100, but the crew assigned-events API service still caps `limit` at 25 (`PAGINATION.MAX_LIMIT`). Until backend caps align with validation, restrict page-size options for this table (max 25) or clamp `limit` before the request so row count matches the selected page size.
+**PR comment (line 9):** **High (Contract):** `CREW_ASSIGNED_EVENTS_PAGE_SIZE` uses `DEFAULT_LIST_PAGINATION.pageSize` (5) while backend `LIST_QUERY_PAGINATION.DEFAULT_PAGE_SIZE` and frontend `DEFAULT_LIST_QUERY.pageSize` are both 10. Use `DEFAULT_LIST_QUERY.pageSize` (or `10`) for the initial page size so crew assigned-events matches the shared list contract.
 
 ---
 
 ## Findings
 
 ---
-Assigned events pagination bypasses usePagination bar/hidden
+Protected table/pagination modules modified
+
+Risk Level: CRITICAL  
+**Status:** Open  
+File Path: skillshow-admin-ui/src/hooks/use-pagination.ts  
+Lines: 1-36
+
+Description:
+**Protected module.** This PR modifies four frozen shared modules to support server-side assigned events:
+
+| File | Change |
+|------|--------|
+| `pagination-bar.tsx` | Optional `pageSizeOptions` prop |
+| `use-pagination.ts` | Delegates `bar`/`hidden` to new `useListPaginationBar` |
+| `use-server-table-controls.ts` | `initialPageSize` parameter |
+| `table-sort.ts` | `getServerColumnSortOrder` export |
+
+Changes are additive/backward-compatible (defaults preserve prior behavior), and `use-admin-edit-request-list-pagination.ts` correctly migrates to `useListPaginationBar`. However, SKSH-337 does not explicitly scope shared infrastructure changes.
+
+Impact:
+- Shared pagination/sort behavior changes ride on a feature ticket — higher regression risk for all server lists using these hooks.
+- Future list pages depend on hooks modified outside a dedicated infra review.
+
+Recommendation:
+Either (a) confirm SKSH-337 explicitly authorizes these protected-module updates and mark **Accepted**, or (b) split `useListPaginationBar`, `getServerColumnSortOrder`, and hook refactors into a small prerequisite PR reviewed on its own, then rebase the assigned-events UI on top.
+
+**PR comment (`use-pagination.ts` line 3):** **Critical (Protected module):** This PR modifies four frozen table/pagination modules (`pagination-bar.tsx`, `use-pagination.ts`, `use-server-table-controls.ts`, `table-sort.ts`). Changes look backward-compatible, but protected-module edits need explicit ticket scope or a dedicated infra PR. Please confirm SKSH-337 authorizes these shared changes, or split the hook extractions into a separate review.
+
+---
+
+---
+Assigned events initial page size out of sync with list contract
 
 Risk Level: HIGH  
 **Status:** Open  
-File Path: skillshow-admin-ui/src/pages/dashboard/crew/dashboard/components/assigned-events-section.tsx  
-Lines: 16-43
+File Path: skillshow-admin-ui/src/pages/dashboard/crew/dashboard/constants.ts  
+Lines: 9
 
 Description:
-**Contract / DRY.** `AssignedEventsSection` calls `usePagination` with a hardcoded `total` of `0`, consuming only `page` / `pageSize` / setters. `AssignedEventsTable` then re-implements the frozen pagination contract — hidden Ant `pagination` config (lines 22–33) and explicit `PaginationBar` props (lines 55–63) — instead of using `usePagination`'s `hidden` and `bar` outputs.
+**Contract.** `CREW_ASSIGNED_EVENTS_PAGE_SIZE` is set from `DEFAULT_LIST_PAGINATION.pageSize` (`PAGE_SIZE_OPTIONS[0]` = **5**), while:
 
-```16:43:skillshow-admin-ui/src/pages/dashboard/crew/dashboard/components/assigned-events-section.tsx
-	const { page, pageSize, setPage, setPageSize } = usePagination(
-		CREW_ASSIGNED_EVENTS_TABLE_FILTER_KEY,
-		0,
-		CREW_ASSIGNED_EVENTS_PAGE_SIZE,
-	);
-	const { isPending, rows, total } = useCrewAssignedEvents(page, pageSize);
-	// ...
-			<AssignedEventsTable
-				isPending={isPending}
-				onPageChange={setPage}
-				onPageSizeChange={setPageSize}
-				page={page}
-				pageSize={pageSize}
-				rows={rows}
-				total={total}
-			/>
+- Backend `LIST_QUERY_PAGINATION.DEFAULT_PAGE_SIZE` = **10**
+- Frontend `DEFAULT_LIST_QUERY.pageSize` = **10**
+
+`useCrewAssignedEvents` passes `initialPageSize: CREW_ASSIGNED_EVENTS_PAGE_SIZE` into `useServerTableControls`, so the table loads with 5 rows per page on first visit — inconsistent with the documented cross-stack default of 10.
+
+```9:9:skillshow-admin-ui/src/pages/dashboard/crew/dashboard/constants.ts
+export const CREW_ASSIGNED_EVENTS_PAGE_SIZE = DEFAULT_LIST_PAGINATION.pageSize;
 ```
-
-Sibling server lists (e.g. `events-table.tsx`) colocate `bar`/`hidden` next to API `total` and pass them down — this PR introduces a third variant for the same dashboard feature family.
 
 Impact:
-- Duplicated hidden-pagination markup will drift from `usePagination` / `PaginationBar` behavior (e.g. `showLessItems`, zero-total handling).
-- Partial `usePagination` usage adds indirection without benefiting from the frozen hook contract.
+- Crew dashboard assigned-events table shows 5 rows while other admin lists default to 10.
+- If `limit` were omitted, backend would return 10 rows while UI state expects 5.
 
 Recommendation:
-Colocate pagination UI with API `total` in the section (mirror `events-table.tsx` lines 35–37), then pass `hidden` and `bar` into `AssignedEventsTable`:
-
-```tsx
-const { page, pageSize, setPage, setPageSize } = usePagination(
-  CREW_ASSIGNED_EVENTS_TABLE_FILTER_KEY,
-  0,
-  CREW_ASSIGNED_EVENTS_PAGE_SIZE,
-);
-const { isPending, rows, total } = useCrewAssignedEvents(page, pageSize);
-
-const hidden =
-  total === 0
-    ? false
-    : { current: page, onChange: setPage, pageSize, showLessItems: true, showSizeChanger: false, style: { display: "none" }, total };
-const bar = { page, pageSize, setPage, setPageSize, total };
+```typescript
+export const CREW_ASSIGNED_EVENTS_PAGE_SIZE = DEFAULT_LIST_QUERY.pageSize;
 ```
 
-Alternatively, merge page state + query + `bar`/`hidden` into a colocated `useAssignedEventsTable` hook and delete the duplicate hidden-pagination block from `AssignedEventsTable`.
+**PR comment (`constants.ts` line 9):** **High (Contract):** `CREW_ASSIGNED_EVENTS_PAGE_SIZE` uses `DEFAULT_LIST_PAGINATION.pageSize` (5) while backend and `DEFAULT_LIST_QUERY` default to 10. Use `DEFAULT_LIST_QUERY.pageSize` for the initial page size.
 
-**PR comment (`assigned-events-section.tsx` line 16):** **High (Contract):** `usePagination` is called with hardcoded `total: 0`, so only page state is used while `AssignedEventsTable` re-implements hidden Ant pagination + `PaginationBar` props. Derive `bar`/`hidden` from `page`, `pageSize`, API `total`, and `setPage`/`setPageSize` in the section (same pattern as `events-table.tsx`) and pass them to the table instead of duplicating the hidden-pagination config.
+---
+
+---
+Assigned events pagination bypasses usePagination bar/hidden
+
+Risk Level: HIGH  
+**Status:** ✅ Fixed  
+File Path: skillshow-admin-ui/src/pages/dashboard/crew/dashboard/hooks/use-crew-assigned-events.ts  
+Lines: 18-51
+
+Description:
+**Contract / DRY.** Initial review flagged hand-rolled hidden pagination in `AssignedEventsTable` and `usePagination` called with `total: 0`.
+
+Impact:
+- Duplicated pagination markup; partial hook usage.
+
+Recommendation:
+Use `useServerTableControls` + `useListPaginationBar` and pass `bar`/`hidden` to the table.
+
+**Re-review evidence:** `useCrewAssignedEvents` now composes `useServerTableControls`, `useListPaginationBar`, and passes `bar`/`hidden` through `AssignedEventsSection` → `AssignedEventsTable`. Table uses `applyServerSort` and `pagination={hidden}`.
 
 ---
 
@@ -131,23 +160,20 @@ Alternatively, merge page state + query + `bar`/`hidden` into a colocated `useAs
 PaginationBar page sizes exceed backend crew limit cap
 
 Risk Level: HIGH  
-**Status:** Open  
-File Path: skillshow-admin-ui/src/pages/dashboard/crew/dashboard/components/assigned-events-table.tsx  
-Lines: 55-63
+**Status:** ✅ Fixed  
+File Path: skillshow-admin-ui/src/components/pagination-bar.tsx  
+Lines: 11-18
 
 Description:
-**Contract (cross-stack).** `PaginationBar` renders `PAGE_SIZE_OPTIONS` `[5, 10, 20, 50, 100]`. The crew assigned-events API validates `limit` up to 100 (this PR) but the service layer still clamps to `PAGINATION.MAX_LIMIT` (**25**) on the backend. When a user selects 50 or 100 rows per page, the UI label does not match the number of rows returned.
+**Contract (cross-stack).** Initial review flagged `PaginationBar` options up to 100 while backend service capped `limit` at 25.
 
 Impact:
-- Crew users see fewer rows than the selected page size with no error feedback.
-- `totalPages` / page navigation can appear correct while row density is wrong.
+- UI page size could exceed rows returned.
 
 Recommendation:
-Until backend service caps align with validation (see [backend.md](./backend.md) #2), either:
-1. Pass a restricted `pageSizeOptions` prop to `PaginationBar` (max 25) for this table, or
-2. Clamp `limit` in `getCrewAssignedEvents` / `useCrewAssignedEvents` before the request and sync displayed `pageSize` to the clamped value.
+Align backend cap with validation or restrict `pageSizeOptions`.
 
-**PR comment (`assigned-events-table.tsx` line 56):** **High (Contract):** `PaginationBar` exposes page sizes up to 100, but the crew assigned-events API service still caps `limit` at 25 (`PAGINATION.MAX_LIMIT`). Until backend caps align with validation, restrict page-size options for this table (max 25) or clamp `limit` before the request so row count matches the selected page size.
+**Re-review evidence:** Backend `parseCrewPaginatedListQuery` now caps at `LIST_QUERY_PAGINATION.MAX_PAGE_SIZE` (100), matching `PAGE_SIZE_OPTIONS`. Optional `pageSizeOptions` prop added for future per-table restriction if needed.
 
 ---
 
@@ -155,7 +181,9 @@ Until backend service caps align with validation (see [backend.md](./backend.md)
 
 | # | Title | Risk | Status | File | Lines | PR comment line |
 |---|--------|------|--------|------|-------|-----------------|
-| 1 | Assigned events pagination bypasses usePagination bar/hidden | HIGH | Open | skillshow-admin-ui/src/pages/dashboard/crew/dashboard/components/assigned-events-section.tsx | 16-43 | 16 |
-| 2 | PaginationBar page sizes exceed backend crew limit cap | HIGH | Open | skillshow-admin-ui/src/pages/dashboard/crew/dashboard/components/assigned-events-table.tsx | 55-63 | 56 |
+| 1 | Protected table/pagination modules modified | CRITICAL | Open | skillshow-admin-ui/src/hooks/use-pagination.ts | 1-36 | 3 |
+| 2 | Assigned events initial page size out of sync with list contract | HIGH | Open | skillshow-admin-ui/src/pages/dashboard/crew/dashboard/constants.ts | 9 | 9 |
+| 3 | Assigned events pagination bypasses usePagination bar/hidden | HIGH | ✅ Fixed | skillshow-admin-ui/src/pages/dashboard/crew/dashboard/hooks/use-crew-assigned-events.ts | 18-51 | — |
+| 4 | PaginationBar page sizes exceed backend crew limit cap | HIGH | ✅ Fixed | skillshow-admin-ui/src/components/pagination-bar.tsx | 11-18 | — |
 
-**Merge readiness:** **Not merge-ready** — 2 open High findings (pagination contract + cross-stack page-size cap). Fix before merge.
+**Merge readiness:** **Not merge-ready** — 1 open Critical (protected-module scope) + 1 open High (default page size 5 vs 10). Backend has no open blockers. Mark finding #1 **Accepted** if ticket scope includes shared hook changes; fix #2 before merge.
