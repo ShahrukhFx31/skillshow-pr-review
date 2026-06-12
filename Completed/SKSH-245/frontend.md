@@ -4,6 +4,7 @@
 **Branch:** `SKSH-245`  
 **Base:** `main...origin/SKSH-245` @ `cf493649`  
 **Initial review:** 2026-06-12  
+**Re-review:** 2026-06-12 @ `cf493649` (unchanged since initial review)  
 **Scope:** My Videos tab classification for `isEditUploaded` / `isSkillshowUploaded`; approve-flow cache invalidation + toast; distribute eligibility for promoted outputs  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
@@ -44,7 +45,7 @@
 - **Minimal, targeted diff:** Six files; no unrelated refactors.
 - **Cross-stack alignment:** Frontend tab filter and distribute gate match backend `VIDEO_EXCLUDE_EDIT_UPLOADED_QUERY` / `VIDEO_SKILLSHOW_UPLOADED_MATCH` semantics.
 - **UX on approve:** Success toast + query invalidation refreshes My Videos without requiring a manual reload.
-- **Type safety:** Approve response includes optional `videoId` aligned with backend DTO (available for future deep-link if needed).
+- **Backend re-review:** Prior backend High findings fixed in `skillshow@2890a85`; frontend unchanged and still aligned.
 
 ---
 
@@ -66,4 +67,4 @@ No Critical or High findings.
 |---|--------|------|--------|------|-------|-----------------|
 | — | — | — | — | — | — | — |
 
-**Merge readiness:** **Merge-ready on frontend scope** — no open findings. Ticket-level merge still blocked by backend High findings in [backend.md](./backend.md) (#1 approve/promote ordering, #2 concurrent create).
+**Merge readiness:** **Merge-ready** — no open findings. Ticket-level merge-ready with [backend.md](./backend.md) (prior High findings Fixed @ `2890a85`).
