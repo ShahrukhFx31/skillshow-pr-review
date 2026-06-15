@@ -2,86 +2,81 @@
 
 **Repo:** skillshow-admin-ui — `https://github.com/fx31labs-mvp/skillshow-admin-ui.git`  
 **Branch:** `SKSH-329`  
-**Base:** `main...HEAD` @ `8bcd0596`  
+**Base:** `main...HEAD` @ `ef39df5`  
 **Initial review:** 2026-06-12  
-**Scope:** Edit-request copy refresh (“internal revision” → “internal review”, Title Case labels), shared table title/note truncation components, admin table loading simplification, submit-failure overlay behavior (Critical / High / Medium)  
+**Re-reviewed:** 2026-06-12 (`ef39df5` — overlay failure copy restored, `EditRequestTableText` consolidation, typos/hidePagination fixed, `sorter: true` regression)  
+**Scope:** Edit-request copy refresh (“internal revision” → “internal review”, Title Case labels), shared table text truncation, admin list column sort behavior (Critical / High / Medium)  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
 **Aligned with:** [backend.md](./backend.md)
 
-**Findings:** 6 (0 Critical, 3 High, 3 Medium) — **2 High Open**, **1 High Accepted**, **3 Medium Open**
+**Findings:** 7 (0 Critical, 4 High, 3 Medium) — **1 High Open**, **2 High Fixed**, **2 High Accepted**, **3 Medium Fixed**
 
 ### Protected modules
 
 | Module | Status |
 |--------|--------|
 | `pagination-bar.tsx`, `use-pagination.ts`, `use-server-table-controls.ts`, `table-sort.ts` | **Not modified** ✅ |
-| `destructive-action-confirm-modal.tsx` | **Not modified** — consumer refactor only (`EditDetailsSourceFilesSection`) ✅ |
+| `destructive-action-confirm-modal.tsx` | **Not modified** — consumer refactor only ✅ |
 | `antd.adapter.tsx`, audit-log components | Not modified |
 
-### Files reviewed (29 changed)
+### Files reviewed (26 changed)
 
 | File | Change |
 |------|--------|
-| `src/components/edit-request/EditRequestTableTitle.tsx` | **New** — char-limited title + tooltip |
-| `src/components/edit-request/EditRequestTableNote.tsx` | **New** — char-limited note + tooltip |
-| `src/constants/edit-request-display.constants.ts` | **New** — 30-char display limits |
-| `src/utils/edit-request-display.utils.ts` | **New** — shared preview formatters |
+| `src/components/edit-request/EditRequestTableText.tsx` | **New** — shared char-limited text + tooltip |
+| `src/constants/edit-request-display.constants.ts` | `EDIT_REQUEST_TABLE_TEXT_DISPLAY_MAX_LENGTH` |
+| `src/utils/edit-request-display.utils.ts` | `formatEditRequestTableTextPreview` |
 | `src/constants/edit-request-activity-history.constants.ts` | Internal review label updates |
 | `src/constants/edit-request-output-version-status.constants.ts` | Title Case status labels |
 | `src/constants/edit-request-permission.constants.ts` | Title Case permission labels |
 | `src/components/edit-request/assign-editor/constants/assign-editor.constants.ts` | Title Case assign-editor copy |
-| `src/pages/adminEditRequest/**` | Copy, columns, tables, insights, output actions |
-| `src/pages/editRequest/**` | Copy, tables/cards, overlay, submit error handling |
-| `src/pages/adminEditRequest/utils/internal-revision/admin-edit-request-internal-revision.utils.ts` | Default-note string update |
+| `src/pages/adminEditRequest/components/admin-edit-request-columns.tsx` | `EditRequestTableText`; `sorter: true` (regression — #7) |
+| `src/pages/adminEditRequest/hooks/use-admin-edit-request-insights-table-columns.tsx` | Same `sorter: true` pattern |
+| `src/pages/adminEditRequest/**` | Copy, filters refactor, output actions |
+| `src/pages/editRequest/**` | Copy, tables/cards, overlay, submit handling |
 
 ### DRY / KISS / Reusability / Global consistency scan
 
 | Check | Verdict |
 |-------|---------|
-| `EditRequestTableTitle` / `EditRequestTableNote` + `edit-request-display.utils` extracted for list truncation | ✅ DRY — adopted in admin list, insights, athlete list/cards |
+| `EditRequestTableText` + `formatEditRequestTableTextPreview` — single component for title/note truncation | ✅ DRY (improved since initial review) |
 | Activity-history labels aligned with backend default note string | ✅ Accepted (#2) — legacy DB notes may show old wording |
-| Title Case applied across most admin/athlete edit-request copy | ⚠️ `assignedEditorLabel` still lowercase — see #6 |
-| Athlete marketing “2 rounds” copy changed to “review” | ❌ Wrong scope — see #3 |
-| `tableSkyLoading` removed from admin edit-request tables only | ✅ Scoped; other tables unchanged |
-| Submit failure: overlay + toast both removed | ❌ UX regression — see #1 |
-| `hidePagination` contract on `AdminEditRequestTable` | ❌ Regression risk — see #5 |
+| Title Case applied across admin/athlete edit-request copy | ✅ Fixed (#6) — sidebar uses `ASSIGN_EDITOR_ASSIGNED_LABEL` |
+| Athlete marketing “2 rounds” copy changed to “review” | ✅ Accepted (#3) — revert to “revisions” before merge |
+| Submit failure overlay body message | ✅ Fixed (#1) |
+| `hidePagination` contract on `AdminEditRequestTable` | ✅ Fixed (#5) |
+| Admin list/insights `sorter: true` without sort handler | ❌ Regression — see #7 |
 | Protected table/pagination modules untouched | ✅ |
 
 ### Positive notes
 
-- **Reusability:** `formatEditRequestTableTitlePreview` / `formatEditRequestTableNotePreview` centralize 30-char ellipsis + tooltip for edit-request list surfaces.
-- **Global consistency:** `EditRequestTableTitle` wired through admin list, insights, athlete table, and mobile cards in one PR.
-- **Destructive flow:** `EditDetailsSourceFilesSection` correctly hoists `removeConfirmItemName` for `DestructiveActionConfirmModal` without touching the frozen modal module.
-- **Internal review rename:** Broad constant sweep updates UI labels, toasts, and activity-history display strings to “internal review”.
+- **DRY improvement:** Consolidated `EditRequestTableTitle` / `EditRequestTableNote` into one `EditRequestTableText` + single formatter.
+- **Failure UX restored:** `RequestStatusOverlay` again shows `OVERLAY_FAILURE_MESSAGE` on failed submit.
+- **Copy polish:** Double-space typos fixed; `hidePagination ? false : hiddenPagination` restored; `tableSkyLoading` retained on admin tables.
+- **Backend alignment:** Manager history defaults fixed on backend ([#1](./backend.md)).
 
 ---
 
 ## GitHub comments
 
-### 1. `src/pages/editRequest/components/RequestStatusOverlay.tsx` line 23
+### 1. ~~`src/pages/editRequest/components/RequestStatusOverlay.tsx` line 23~~ — **Fixed**
 
-**PR comment (line 23):** **High (UX):** Submit failure now shows only the “Request Failed” title — the body message and `appToast.error` were both removed. Users get no explanation when `createEditRequest` fails. Restore a failure message in the overlay (or reinstate the toast) so the error state is actionable.
+Failure body message restored via `bodyMessage = isSuccess ? OVERLAY_SUCCESS_MESSAGE : OVERLAY_FAILURE_MESSAGE`.
 
-### 2. ~~`src/pages/adminEditRequest/utils/internal-revision/admin-edit-request-internal-revision.utils.ts` line 52~~ — **Accepted**
+### 2. ~~Legacy note normalization~~ — **Accepted**
 
-Legacy `"Sent for internal revision"` notes on pre-migration rows may display verbatim; no normalization helper required for this ticket.
+### 3. ~~Athlete “2 rounds” copy incorrectly changed to “review”~~ — **Accepted**
 
-### 3. `src/pages/editRequest/components/UploadVideosScreen.tsx` line 72
+### 4. ~~Double-space typos~~ — **Fixed**
 
-**PR comment (line 72):** **High (Copy scope):** “Up to 2 rounds of review” conflates athlete revision rounds with the internal-review workflow rename. This athlete-facing product copy should stay “revisions” (revert `UploadVideosScreen` and `EnhanceVideoScreen`).
+### 5. ~~`hidePagination` contract~~ — **Fixed**
 
-### 4. `src/pages/adminEditRequest/constants/admin-edit-request.constants.ts` line 102
+### 6. ~~`assignedEditorLabel` Title Case~~ — **Fixed** (sidebar copy removed; `ASSIGN_EDITOR_ASSIGNED_LABEL` used)
 
-**PR comment (line 102):** **Medium:** `sectionTitle` and `reviewFailed` contain double spaces (`"Internal  review"`, `"internal  review"`). Trim to single spaces.
+### 7. `src/pages/adminEditRequest/components/admin-edit-request-columns.tsx` line 70
 
-### 5. `src/pages/adminEditRequest/components/admin-edit-request-table.tsx` line 112
-
-**PR comment (line 112):** **Medium (Contract):** `hidePagination` no longer forces `pagination={false}` on the desktop `Table`. Dashboard preview (`hidePagination`) relies on server-sliced rows; hidden pagination can client-slice an empty page when `page > 1`. Restore `hidePagination ? false : hiddenPagination`.
-
-### 6. `src/pages/adminEditRequest/constants/admin-edit-request.constants.ts` line 263
-
-**PR comment (line 263):** **Medium (Global consistency):** `ASSIGN_EDITOR_ASSIGNED_LABEL` was updated to “Assigned Editor:” but `ADMIN_EDIT_REQUEST_SIDEBAR_CARD_COPY.assignedEditorLabel` is still “Assigned editor:”. Align for Title Case consistency.
+**PR comment (line 70):** **High (Regression):** Client-side `sorter: (a, b) => …` compare functions were replaced with `sorter: true`, but `AdminEditRequestTable` has no `onChange` / `applyServerSort` wiring. Column headers show sort UI but rows do not reorder. Restore client compare functions or wire server sort end-to-end (same issue in insights columns).
 
 ---
 
@@ -91,30 +86,20 @@ Legacy `"Sent for internal revision"` notes on pre-migration rows may display ve
 Submit failure overlay shows no error message
 
 Risk Level: HIGH  
-**Status:** Open  
+**Status:** ✅ Fixed  
 File Path: skillshow-admin-ui/src/pages/editRequest/components/RequestStatusOverlay.tsx  
-Lines: 23-60
+Lines: 17-27, 58-59
 
 Description:
-**UX regression.** This PR removes `OVERLAY_FAILURE_MESSAGE`, renders the success body only when `isSuccess`, and deletes `appToast.error(EDIT_REQUEST_SUBMIT_COPY.submitFailed)` from `editRequest/index.tsx` `onError`.
-
-On `createEditRequest` failure the overlay opens with title “Request Failed”, failure icon, and the pro-editing link — but **no explanatory body text** and no toast.
+**UX regression (initial review).** Prior commit removed failure body text and `appToast.error` on submit failure.
 
 Impact:
-- Athletes see a failure modal with no guidance on what went wrong or what to do next.
-- Support burden increases; users may assume the request was lost.
+- Athletes saw “Request Failed” with no explanation.
 
 Recommendation:
-Restore failure copy in the overlay:
+Restore `OVERLAY_FAILURE_MESSAGE` in overlay body for failure state.
 
-```typescript
-const OVERLAY_FAILURE_MESSAGE =
-  "Something went wrong and your request could not be processed. Please try again or contact support.";
-```
-
-Render it when `isFailure`, or reinstate the toast in `onError` if the overlay body is intentionally minimal.
-
-**PR comment (`RequestStatusOverlay.tsx` line 23):** **High (UX):** Submit failure now shows only the “Request Failed” title — the body message and `appToast.error` were both removed. Users get no explanation when `createEditRequest` fails. Restore a failure message in the overlay (or reinstate the toast).
+**Re-review evidence:** `bodyMessage = isSuccess ? OVERLAY_SUCCESS_MESSAGE : OVERLAY_FAILURE_MESSAGE` and paragraph renders `{bodyMessage}`. Toast on error remains removed; overlay copy is sufficient per original either/or recommendation.
 
 ---
 
@@ -127,13 +112,9 @@ File Path: skillshow-admin-ui/src/pages/adminEditRequest/utils/internal-revision
 Lines: 52-55
 
 Description:
-**Global consistency / backward compatibility.** `resolveInternalRevisionRequestNoteForManager` gates on `"Sent for internal review"` only. Historical `internal_revision_requested` rows may still store `"Sent for internal revision"`.
+Historical `internal_revision_requested` rows may store `"Sent for internal revision"`.
 
-Impact:
-- Manager internal-review UI may show old wording on pre-migration requests only.
-- New requests use the updated backend default string.
-
-**Accepted:** Legacy stored notes are out of scope for SKSH-329; acceptable to show historical copy verbatim. New data uses “internal review” end-to-end.
+**Accepted:** Legacy stored notes are out of scope for SKSH-329; acceptable to show historical copy verbatim.
 
 ---
 
@@ -141,25 +122,20 @@ Impact:
 Athlete “2 rounds” copy incorrectly changed to “review”
 
 Risk Level: HIGH  
-**Status:** Open  
+**Status:** Accepted  
 File Path: skillshow-admin-ui/src/pages/editRequest/components/UploadVideosScreen.tsx  
-Lines: 72
+Lines: 77
 
 Description:
-**Copy scope.** `UploadVideosScreen` and `EnhanceVideoScreen` change “Up to 2 rounds of revisions” → “Up to 2 rounds of review”. That string describes the **athlete product offering** (revision rounds on delivered edits), not the crew/manager **internal review** workflow this ticket renames.
+**Copy scope.** `UploadVideosScreen` and `EnhanceVideoScreen` use “Up to 2 rounds of review”. That describes the **athlete product offering** (revision rounds on delivered edits), not the crew/manager internal-review rename.
 
 Impact:
-- Confusing athlete-facing marketing copy; “review” implies a different workflow than paid revision rounds.
-- Unrelated surface changed under an internal-review terminology ticket.
+- Confusing athlete-facing marketing copy.
 
 Recommendation:
-Revert both files to “revisions”:
+Revert both to `"Up to 2 rounds of revisions"`.
 
-```typescript
-"Up to 2 rounds of revisions"
-```
-
-**PR comment (line 72):** **High (Copy scope):** Revert athlete marketing copy to “revisions”; internal-review rename should not touch revision-round product language.
+**Accepted:** Valid copy-scope finding. Revert athlete marketing copy to “revisions” in `UploadVideosScreen` and `EnhanceVideoScreen` before merge.
 
 ---
 
@@ -167,23 +143,14 @@ Revert both files to “revisions”:
 Double-space typos in internal review copy constants
 
 Risk Level: MEDIUM  
-**Status:** Open  
+**Status:** ✅ Fixed  
 File Path: skillshow-admin-ui/src/pages/adminEditRequest/constants/admin-edit-request.constants.ts  
 Lines: 99, 102
 
 Description:
-**Copy quality.** `reviewFailed: "Failed to submit internal  review."` and `sectionTitle: "Internal  review"` contain double spaces before “review”.
+**Copy quality.** `reviewFailed` and `sectionTitle` had double spaces.
 
-Impact:
-- Visible typos in manager internal-review section title and error toast.
-
-Recommendation:
-```typescript
-reviewFailed: "Failed to submit internal review.",
-sectionTitle: "Internal review",
-```
-
-**PR comment (line 102):** **Medium:** Fix double spaces in `sectionTitle` and `reviewFailed`.
+**Re-review evidence:** `reviewFailed: "Failed to submit internal review."`, `sectionTitle: "Internal review"`.
 
 ---
 
@@ -191,25 +158,14 @@ sectionTitle: "Internal review",
 hidePagination no longer disables Table pagination
 
 Risk Level: MEDIUM  
-**Status:** Open  
+**Status:** ✅ Fixed  
 File Path: skillshow-admin-ui/src/pages/adminEditRequest/components/admin-edit-request-table.tsx  
-Lines: 112
+Lines: 122
 
 Description:
-**Contract.** Desktop table changed from `pagination={hidePagination ? false : hiddenPagination}` to always `pagination={hiddenPagination}`.
+**Contract.** `hidePagination` must force `pagination={false}` for server-sliced preview tables.
 
-`AdminDashboardLiveOperationsSection` passes `hidePagination` with server-paginated preview rows (`page` always 1 today). Hidden pagination still configures Ant Table client-side slicing; if `page > 1` while `hidePagination` is true, the table can render an empty page even though `rows` contains data.
-
-Impact:
-- Latent regression for dashboard preview and any future `hidePagination` consumer.
-- Violates the prop’s intent (show all passed rows, no table pagination).
-
-Recommendation:
-```typescript
-pagination={hidePagination ? false : hiddenPagination}
-```
-
-**PR comment (line 112):** **Medium (Contract):** Restore `hidePagination ? false : hiddenPagination` for server-sliced preview tables.
+**Re-review evidence:** `pagination={hidePagination ? false : hiddenPagination}` restored.
 
 ---
 
@@ -217,22 +173,44 @@ pagination={hidePagination ? false : hiddenPagination}
 Incomplete Title Case on assigned-editor sidebar label
 
 Risk Level: MEDIUM  
-**Status:** Open  
+**Status:** ✅ Fixed  
 File Path: skillshow-admin-ui/src/pages/adminEditRequest/constants/admin-edit-request.constants.ts  
-Lines: 263
+Lines: 262-274
 
 Description:
-**Global consistency.** Same PR updates `ASSIGN_EDITOR_ASSIGNED_LABEL` to “Assigned Editor:” but leaves `ADMIN_EDIT_REQUEST_SIDEBAR_CARD_COPY.assignedEditorLabel` as “Assigned editor:”.
+**Global consistency.** `ADMIN_EDIT_REQUEST_SIDEBAR_CARD_COPY.assignedEditorLabel` was lowercase while assign-editor modal used Title Case.
+
+**Re-review evidence:** `assignedEditorLabel` / `assignEditor` keys removed from sidebar copy; `AssignEditorField` uses `ASSIGN_EDITOR_ASSIGNED_LABEL` (“Assigned Editor:”).
+
+---
+
+---
+Admin list column sort UI no longer sorts rows
+
+Risk Level: HIGH  
+**Status:** Open  
+File Path: skillshow-admin-ui/src/pages/adminEditRequest/components/admin-edit-request-columns.tsx  
+Lines: 70-224
+
+Description:
+**Regression.** This PR replaces client-side compare functions (e.g. `sorter: (a, b) => a.title.localeCompare(b.title)`) with `sorter: true` on all sortable columns. `AdminEditRequestTable` and `AdminEditRequestInsightsTable` do not pass `onChange` with `applyServerSort`, and the list hooks do not expose `sortBy` / `sortOrder` to the API.
 
 Impact:
-- Inconsistent casing between assign-editor modal and admin detail sidebar on the same screen.
+- Column sort affordances appear but clicking headers does not reorder the current page (broken sort UX on My Edit Requests and Insights tabs).
+- Regresses behavior that worked via in-page client sort before this PR.
 
 Recommendation:
+Either restore client-side compare functions:
+
 ```typescript
-assignedEditorLabel: "Assigned Editor:",
+sorter: (a, b) => a.title.localeCompare(b.title),
 ```
 
-**PR comment (line 263):** **Medium:** Align `assignedEditorLabel` with “Assigned Editor:”.
+Or wire full server sort: `useServerTableControls` + `applyServerSort` + API `sortBy`/`sortOrder` on list queries (match protected server-table contract).
+
+Apply the same fix in `use-admin-edit-request-insights-table-columns.tsx`.
+
+**PR comment (line 70):** **High (Regression):** `sorter: true` without Table `onChange` or compare functions breaks column sorting. Restore client `sorter` functions or wire server sort.
 
 ---
 
@@ -240,11 +218,12 @@ assignedEditorLabel: "Assigned Editor:",
 
 | # | Title | Risk | Status | File | Lines | PR comment line |
 |---|--------|------|--------|------|-------|-----------------|
-| 1 | Submit failure overlay shows no error message | HIGH | Open | skillshow-admin-ui/src/pages/editRequest/components/RequestStatusOverlay.tsx | 23-60 | 23 |
+| 1 | Submit failure overlay shows no error message | HIGH | ✅ Fixed | skillshow-admin-ui/src/pages/editRequest/components/RequestStatusOverlay.tsx | 17-27, 58-59 | — |
 | 2 | Legacy internal-revision default notes no longer normalized | HIGH | Accepted | skillshow-admin-ui/src/pages/adminEditRequest/utils/internal-revision/admin-edit-request-internal-revision.utils.ts | 52-55 | — |
-| 3 | Athlete “2 rounds” copy incorrectly changed to “review” | HIGH | Open | skillshow-admin-ui/src/pages/editRequest/components/UploadVideosScreen.tsx | 72 | 72 |
-| 4 | Double-space typos in internal review copy constants | MEDIUM | Open | skillshow-admin-ui/src/pages/adminEditRequest/constants/admin-edit-request.constants.ts | 99, 102 | 102 |
-| 5 | hidePagination no longer disables Table pagination | MEDIUM | Open | skillshow-admin-ui/src/pages/adminEditRequest/components/admin-edit-request-table.tsx | 112 | 112 |
-| 6 | Incomplete Title Case on assigned-editor sidebar label | MEDIUM | Open | skillshow-admin-ui/src/pages/adminEditRequest/constants/admin-edit-request.constants.ts | 263 | 263 |
+| 3 | Athlete “2 rounds” copy incorrectly changed to “review” | HIGH | Accepted | skillshow-admin-ui/src/pages/editRequest/components/UploadVideosScreen.tsx | 77 | 77 |
+| 4 | Double-space typos in internal review copy constants | MEDIUM | ✅ Fixed | skillshow-admin-ui/src/pages/adminEditRequest/constants/admin-edit-request.constants.ts | 99, 102 | — |
+| 5 | hidePagination no longer disables Table pagination | MEDIUM | ✅ Fixed | skillshow-admin-ui/src/pages/adminEditRequest/components/admin-edit-request-table.tsx | 122 | — |
+| 6 | Incomplete Title Case on assigned-editor sidebar label | MEDIUM | ✅ Fixed | skillshow-admin-ui/src/pages/adminEditRequest/constants/admin-edit-request.constants.ts | 262-274 | — |
+| 7 | Admin list column sort UI no longer sorts rows | HIGH | Open | skillshow-admin-ui/src/pages/adminEditRequest/components/admin-edit-request-columns.tsx | 70-224 | 70 |
 
-**Merge readiness:** **Not merge-ready** — 2 open High (submit failure UX, athlete revision-round copy) + 3 open Medium (typos, hidePagination contract, sidebar label). Finding #2 **Accepted** (legacy note wording). Fix remaining High blockers before merge.
+**Merge readiness:** **Not merge-ready** — 1 open High (#7 broken column sorting). Backend is merge-ready. Findings #2–#3 **Accepted**; #1, #4–#6 **Fixed** on branch. #3 accepted: revert athlete “2 rounds” copy to “revisions” before merge.
