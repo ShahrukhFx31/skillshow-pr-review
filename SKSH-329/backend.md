@@ -4,7 +4,7 @@
 **Branch:** `SKSH-329`  
 **Base:** `main...HEAD` @ `5c3b6c6`  
 **Initial review:** 2026-06-12  
-**Re-reviewed:** 2026-06-12 (`5c3b6c6` — manager history defaults added)  
+**Re-reviewed:** 2026-06-12 (`5c3b6c6` — unchanged since prior re-review)  
 **Scope:** Rename user-facing “internal revision” default strings to “internal review” in output controller + edit-request service (Critical / High only)  
 **Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
@@ -33,7 +33,7 @@
 | Minimal string-only diff — no new abstractions | ✅ KISS |
 | API response messages match new frontend toast/labels | ✅ |
 | Persisted manager approve/changes history defaults | ✅ Fixed (#1) |
-| `edit-request-output.constants.ts` upload-hint strings unchanged (“internal revision”) | ⚠️ Out of PR diff; code comments / crew upload hints — follow-up optional |
+| `adminListQuerySchema` / insights schema lack `sortBy`/`sortOrder` | ⚠️ Frontend [#7](./frontend.md) sends sort params — out of backend PR scope |
 | Protected list/audit modules untouched | ✅ |
 
 ### Positive notes
@@ -45,7 +45,7 @@
 
 ## GitHub comments
 
-_No open findings — prior comment resolved on branch._
+_No open findings._
 
 ---
 
@@ -60,20 +60,9 @@ File Path: skillshow/src/services/edit-request.service.ts
 Lines: 788-797
 
 Description:
-**Global consistency.** Initial review flagged `reviewInternalRevision` persisting `"Manager approved internal revision"` and `"Manager requested changes on internal revision"`.
+**Global consistency.** Initial review flagged `reviewInternalRevision` persisting legacy manager history note strings.
 
-Impact:
-- Mixed terminology on manager approve/changes actions.
-
-Recommendation:
-Update persisted defaults to “internal review”.
-
-**Re-review evidence:** Branch now writes:
-
-```typescript
-note: "Manager approved internal review",
-note: body.note?.trim() || "Manager requested changes on internal review",
-```
+**Re-review evidence:** Branch writes `"Manager approved internal review"` and `"Manager requested changes on internal review"`.
 
 ---
 
@@ -83,4 +72,4 @@ note: body.note?.trim() || "Manager requested changes on internal review",
 |---|--------|------|--------|------|-------|-----------------|
 | 1 | Persisted history notes still use “internal revision” wording | HIGH | ✅ Fixed | skillshow/src/services/edit-request.service.ts | 788-797 | — |
 
-**Merge readiness:** **Merge-ready** — no open Critical/High blockers. Frontend ([#3](./frontend.md), [#7](./frontend.md)) still has open High items.
+**Merge readiness:** **Merge-ready** — no open Critical/High blockers on this repo. Frontend ([#7](./frontend.md)) still has 1 open High; admin-list server sort needs backend schema/service work or frontend revert.
