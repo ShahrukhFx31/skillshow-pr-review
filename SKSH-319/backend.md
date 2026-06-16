@@ -2,8 +2,9 @@
 
 **Repo:** skillshow (main API) — `https://github.com/fx31labs-mvp/skillshow.git`  
 **Branch:** `SKSH-319`  
-**Base:** `main...HEAD` @ `6a7bb8b`  
+**Base:** `main...HEAD` @ `d96579e`  
 **Initial review:** 2026-06-12  
+**Re-reviewed:** 2026-06-12 (`d96579e` — upload-date validation re-added; prior fix reverted); **2026-06-12** (no new commits — finding #1 still open)  
 **Scope:** Video Library CSV import via import-tool (`videoLibrary` entity type) — validation context, row resolution, bulk patch apply (Critical / High only)  
 **Prompts:** `backend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
@@ -16,8 +17,6 @@
 | Module | Status |
 |--------|--------|
 | `list-query.validation.ts`, `list-query-aggregation.utils.ts`, audit-log stack, change-stream modules | **Not modified** ✅ |
-
-No list endpoints, bulk row ops, audit logs, or change streams in this diff.
 
 ### Files reviewed (14 changed)
 
@@ -34,9 +33,9 @@ No list endpoints, bulk row ops, audit logs, or change streams in this diff.
 | `src/types/video-library-import.types.ts` | Import payload / resolution types |
 | `src/utils/import-tool.utils.ts` | Entity config, `loadVideoLibraryImportValidationContext` |
 | `src/utils/video-library-import.utils.ts` | Row resolution, read-only checks, serialize/deserialize |
-| `src/validation/video-library-import.validation.ts` | Joi row schema |
-| `tests/services/import-tool.service.test.ts` | Entity config + schema smoke tests |
-| `tests/utils/video-library-import.utils.test.ts` | Resolution unit tests (new) |
+| `src/validation/video-library-import.validation.ts` | Joi row schema (`videoName` required @ `d96579e`) |
+| `tests/services/import-tool.service.test.ts` | Entity config + schema tests |
+| `tests/utils/video-library-import.utils.test.ts` | Resolution unit tests |
 
 ### DRY / KISS / Reusability / Global consistency scan
 
@@ -45,19 +44,17 @@ No list endpoints, bulk row ops, audit logs, or change streams in this diff.
 | Reuses import-tool validate → persist pipeline | ✅ |
 | `video-library-import.utils` centralizes resolution / patch mapping | ✅ DRY |
 | `bulkUpdateByLibrarySeq` + `bulkApplyImportPatches` (one `bulkWrite` per chunk) | ✅ KISS |
-| `templateHeaders` includes read-only columns in header presence check | ✅ Fixed vs `headerToField` filter |
+| `templateHeaders` includes read-only columns in header presence check | ✅ |
 | `TABLE_EXPORT_VIDEO_LIBRARY_ATHLETE_SEPARATOR` aligned with admin UI `"; "` | ✅ |
-| Backend table export + import validation both use `formatTableExportDate` | ✅ (server-side export path) |
-| Client-side Video Library export date vs import read-only check | ❌ Cross-stack — see #1 |
-| `bulkApplyImportPatches` skips `eventSlugExists` / `athleteUsernamesExist` re-check | ✅ Accepted — matches import-tool validate-then-import pattern; documented in method comment |
+| Client-side export date vs import read-only check | ❌ Regression — see #1 |
+| `1a9542a` omitted upload-date check + TZ regression test | ✅ Fixed (then reverted in `d96579e`) |
 | Protected list/audit modules untouched | ✅ |
 
 ### Positive notes
 
-- **Update-only semantics:** Import resolves Event/Athlete labels to slugs/usernames, validates read-only metadata, and bulk-patches — appropriate for export → edit → re-import workflow.
-- **Tests:** `video-library-import.utils.test.ts` covers resolution, read-only columns, unknown lookups, and serialization.
-- **Performance:** Batched `findImportRowsByLibraryIds` + `bulkWrite` avoids per-row updates during import.
-- **Header contract:** `IMPORT_TOOL_VIDEO_LIBRARY_HEADERS` matches frontend `VIDEO_LIBRARY_CSV_HEADERS`; import-tool tests assert alignment.
+- **`1a9542a` showed correct fix:** Commit omitted upload-date tamper check with comment *"CSV uses display formatting (browser/server TZ) and cannot be compared reliably"* and test `does not reject Upload date when display string differs from server export TZ`.
+- **`d96579e` improvements:** `videoName` Joi required + negative test; read-only Uploaded-by / Upload-date tests split.
+- **Performance:** Batched row load + `bulkWrite` per import chunk.
 
 ---
 
@@ -65,37 +62,37 @@ No list endpoints, bulk row ops, audit logs, or change streams in this diff.
 
 ### 1. `src/utils/video-library-import.utils.ts` line 102
 
-**PR comment (line 102):** **High (Cross-stack / Contract):** Read-only `Upload date` validation compares the CSV cell string to `formatTableExportDate(row.createdAt)` on the **server** timezone, but the primary admin export path formats `uploadedAt` in the **browser** (`formatDate` in `export-video-library-csv.ts`). Unmodified exports can fail near UTC midnight boundaries. Compare a canonical instant (e.g. UTC `YYYY-MM-DD` or ISO) on both sides, or drop string equality for dates.
+**PR comment (line 102):** **High (Cross-stack / Regression):** `d96579e` re-added string equality on `Upload date` after `1a9542a` correctly removed it (with a TZ regression test). Server `formatTableExportDate(createdAt)` vs browser `formatDate(uploadedAt)` still diverge across timezones. Re-apply the `1a9542a` approach (skip upload-date tamper check; anchor on Video ID + Uploaded by) or canonicalize UTC on both sides.
 
 ---
 
 ## Findings
 
 ---
-Upload date read-only check mismatches client-exported CSV dates
+Upload date read-only check reintroduced after correct fix (timezone regression)
 
 Risk Level: HIGH  
 **Status:** Open  
-File Path: skillshow/src/utils/video-library-import.utils.ts  
-Lines: 39-42, 96-104
+File Path: src/utils/video-library-import.utils.ts  
+Lines: 39-42, 98-104 (`formatDate` / upload-date check in `validateReadOnlyImportCells`)
 
 Description:
-**Global consistency / Contract.** `mapImportRowsToValidationData` stores `uploadDate` as `formatTableExportDate(row.createdAt, "")` (server-local `MM/DD/YYYY`). `validateReadOnlyImportCells` rejects the row when the CSV `Upload date` cell does not equal that string exactly.
+**Global consistency / Regression.** `validateReadOnlyImportCells` compares CSV `Upload date` to `formatTableExportDate(row.createdAt, "")` (server-local `MM/DD/YYYY`).
 
-The documented workflow exports from Video Library in the admin UI via `exportVideoLibraryRowsAsCsv`, which writes `formatDate(row.uploadedAt)` using the **browser** timezone (`skillshow-admin-ui/src/pages/videoLibrary/dashboard/export-video-library-csv.ts:20`). The same ISO instant can format to different calendar dates when browser TZ ≠ server TZ (e.g. `2026-06-12T03:00:00.000Z` → `06/11/2026` in US Pacific vs `06/12/2026` on a UTC server).
+Commit **`1a9542a`** removed this check and documented why: *"CSV uses display formatting (browser/server TZ) and cannot be compared reliably to `createdAt`"*, with test coverage for Pacific export vs UTC server mismatch.
+
+Commit **`d96579e`** reverted that fix — re-added `uploadDate` to `VideoLibraryImportRowMetadata`, restored string comparison, and flipped the test to expect rejection instead of tolerance.
+
+The primary admin export path still formats dates in the **browser** (`export-video-library-csv.ts` → `formatDate(row.uploadedAt)`). Unmodified exports can fail with **"This column cannot be edited"** when browser TZ ≠ server TZ.
 
 Impact:
-- Admins following the export → fill Event/Athlete → import flow can get false **"This column cannot be edited"** errors on `Upload date` without having changed the cell
-- Blocks import of otherwise valid rows; workaround requires manually editing dates to match server formatting
+- Blocks the documented export → fill Event/Athlete → import workflow for admins in many timezones
+- Reintroduces a bug the branch already fixed once
 
 Recommendation:
-Compare canonical instants, not locale-dependent strings. Options (pick one and align frontend export):
+**Prefer re-applying `1a9542a`:** validate `Uploaded by` only for read-only tamper detection; keep `Upload date` in CSV for display but do not reject on string mismatch.
 
-1. **UTC date-only:** `dayjs.utc(value).format("YYYY-MM-DD")` in both `mapImportRowsToValidationData` and admin export.
-2. **ISO equality:** store/compare `row.createdAt.toISOString()` (or date portion) instead of formatted display strings.
-3. **Relax check:** validate `Uploaded by` only; treat `Upload date` as informational since `Video ID` already anchors row identity.
-
-Add a unit test with a fixed UTC timestamp where local formatting diverges.
+Alternative: canonical UTC `YYYY-MM-DD` on both export and validation (coordinate with [frontend.md](./frontend.md)).
 
 **PR comment (`video-library-import.utils.ts` line 102):** See GitHub comments above.
 
@@ -105,6 +102,6 @@ Add a unit test with a fixed UTC timestamp where local formatting diverges.
 
 | # | Title | Risk | Status | File | Lines | PR comment line |
 |---|--------|------|--------|------|-------|-----------------|
-| 1 | Upload date read-only check mismatches client-exported CSV dates | HIGH | Open | skillshow/src/utils/video-library-import.utils.ts | 39-42, 96-104 | 102 |
+| 1 | Upload date read-only check reintroduced after correct fix (timezone regression) | HIGH | Open | src/utils/video-library-import.utils.ts | 98-104 | 102 |
 
-**Merge readiness:** **Not merge-ready** — 1 open High cross-stack blocker on the primary export → import workflow. Resolve date canonicalization with [frontend.md](./frontend.md) before merge.
+**Merge readiness:** **Not merge-ready** — 1 open High regression on the primary export → import workflow. Re-apply `1a9542a` upload-date omission or align canonical date formatting with [frontend.md](./frontend.md).
