@@ -46,15 +46,19 @@
 | `bulkUpdateByLibrarySeq` + `bulkApplyImportPatches` (one `bulkWrite` per chunk) | ✅ KISS |
 | `templateHeaders` includes read-only columns in header presence check | ✅ |
 | `TABLE_EXPORT_VIDEO_LIBRARY_ATHLETE_SEPARATOR` aligned with admin UI `"; "` | ✅ |
-| Client-side export date vs import read-only check | ❌ Regression — see #1 |
-| `1a9542a` omitted upload-date check + TZ regression test | ✅ Fixed (then reverted in `d96579e`) |
+| Client-side export date vs import read-only check | ❌ TZ mismatch — canonical format needed (#1); omit check rejected for UX |
+| `d96579e` restored upload-date read-only validation | ✅ Accepted — required so user edits show validation error |
 | Protected list/audit modules untouched | ✅ |
 
 ### Positive notes
 
-- **`1a9542a` showed correct fix:** Commit omitted upload-date tamper check with comment *"CSV uses display formatting (browser/server TZ) and cannot be compared reliably"* and test `does not reject Upload date when display string differs from server export TZ`.
+- **`d96579e` restore is correct (team):** Upload-date read-only validation must stay so edited cells show **"This column cannot be edited"**; omitting the check (`1a9542a`) silently ignores user edits.
 - **`d96579e` improvements:** `videoName` Joi required + negative test; read-only Uploaded-by / Upload-date tests split.
 - **Performance:** Batched row load + `bulkWrite` per import chunk.
+
+### Developer response (upload-date validation)
+
+**Accepted:** `1a9542a` was reverted intentionally — without upload-date validation, users who edit the column get no error and assume the value saved. Upload date must remain non-editable with visible validation. **Open work:** use the same canonical date string on export (frontend) and in `mapImportRowsToValidationData` so TZ does not false-fail unmodified exports.
 
 ---
 
@@ -62,39 +66,33 @@
 
 ### 1. `src/utils/video-library-import.utils.ts` line 102
 
-**PR comment (line 102):** **High (Cross-stack / Regression):** `d96579e` re-added string equality on `Upload date` after `1a9542a` correctly removed it (with a TZ regression test). Server `formatTableExportDate(createdAt)` vs browser `formatDate(uploadedAt)` still diverge across timezones. Re-apply the `1a9542a` approach (skip upload-date tamper check; anchor on Video ID + Uploaded by) or canonicalize UTC on both sides.
+> **High (Global consistency):** Keep upload-date read-only validation — users who edit the cell must see **"This column cannot be edited"** (omit check is not acceptable). Fix TZ false-positives by building `expected.uploadDate` with the **same canonical helper** as frontend export (e.g. UTC `MM/DD/YYYY`), not server-local `formatTableExportDate` alone while export uses browser-local `formatDate`.
 
 ---
 
 ## Findings
 
 ---
-Upload date read-only check reintroduced after correct fix (timezone regression)
+Upload date read-only validation must stay; canonical export/validation date formatting needed
 
 Risk Level: HIGH  
 **Status:** Open  
 File Path: src/utils/video-library-import.utils.ts  
-Lines: 39-42, 98-104 (`formatDate` / upload-date check in `validateReadOnlyImportCells`)
+Lines: 39-42, 98-104 (`uploadDate` in `mapImportRowsToValidationData` / `validateReadOnlyImportCells`)
 
 Description:
-**Global consistency / Regression.** `validateReadOnlyImportCells` compares CSV `Upload date` to `formatTableExportDate(row.createdAt, "")` (server-local `MM/DD/YYYY`).
+**Global consistency.** `validateReadOnlyImportCells` compares CSV `Upload date` to `formatTableExportDate(row.createdAt, "")` (server-local `MM/DD/YYYY`). Frontend export uses browser-local `formatDate(row.uploadedAt)`. Unmodified exports can false-fail when browser TZ ≠ server TZ.
 
-Commit **`1a9542a`** removed this check and documented why: *"CSV uses display formatting (browser/server TZ) and cannot be compared reliably to `createdAt`"*, with test coverage for Pacific export vs UTC server mismatch.
-
-Commit **`d96579e`** reverted that fix — re-added `uploadDate` to `VideoLibraryImportRowMetadata`, restored string comparison, and flipped the test to expect rejection instead of tolerance.
-
-The primary admin export path still formats dates in the **browser** (`export-video-library-csv.ts` → `formatDate(row.uploadedAt)`). Unmodified exports can fail with **"This column cannot be edited"** when browser TZ ≠ server TZ.
+**Developer response (accepted):** `1a9542a` omitted this check to avoid TZ false positives; **`d96579e` correctly restored it.** Without validation, users who edit Upload date see no error while import never persists that field — worse UX than TZ edge cases. Upload date must stay read-only with validation on edit.
 
 Impact:
-- Blocks the documented export → fill Event/Athlete → import workflow for admins in many timezones
-- Reintroduces a bug the branch already fixed once
+- TZ mismatch blocks unmodified export → import workflow
+- Omitting validation confuses users who edit Upload date
 
 Recommendation:
-**Prefer re-applying `1a9542a`:** validate `Uploaded by` only for read-only tamper detection; keep `Upload date` in CSV for display but do not reject on string mismatch.
+Add shared canonical formatter for import/export upload dates (UTC or fixed TZ). Use in `mapImportRowsToValidationData` (line 41) and frontend `export-video-library-csv.ts` (line 22). Restore/add cross-TZ test: unmodified export passes; deliberate edit still returns `VIDEO_LIBRARY_IMPORT_READ_ONLY_COLUMN_MESSAGE`.
 
-Alternative: canonical UTC `YYYY-MM-DD` on both export and validation (coordinate with [frontend.md](./frontend.md)).
-
-**PR comment (`video-library-import.utils.ts` line 102):** See GitHub comments above.
+**PR comment:** `src/utils/video-library-import.utils.ts` line **102** — see GitHub comments above.
 
 ---
 
@@ -102,6 +100,6 @@ Alternative: canonical UTC `YYYY-MM-DD` on both export and validation (coordinat
 
 | # | Title | Risk | Status | File | Lines | PR comment line |
 |---|--------|------|--------|------|-------|-----------------|
-| 1 | Upload date read-only check reintroduced after correct fix (timezone regression) | HIGH | Open | src/utils/video-library-import.utils.ts | 98-104 | 102 |
+| 1 | Upload date read-only validation must stay; canonical export/validation date formatting needed | HIGH | Open | src/utils/video-library-import.utils.ts | 98-104 | 102 |
 
-**Merge readiness:** **Not merge-ready** — 1 open High regression on the primary export → import workflow. Re-apply `1a9542a` upload-date omission or align canonical date formatting with [frontend.md](./frontend.md).
+**Merge readiness:** **Not merge-ready** — 1 open High cross-stack blocker. Fix: shared canonical upload-date formatting on export + validation (keep read-only check). See [frontend.md](./frontend.md) #1.
