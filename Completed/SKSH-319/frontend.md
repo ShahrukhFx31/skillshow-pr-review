@@ -2,9 +2,9 @@
 
 **Repo:** skillshow-admin-ui — `https://github.com/fx31labs-mvp/skillshow-admin-ui.git`  
 **Branch:** `SKSH-319`  
-**Base:** `main...HEAD` @ `e853b0eb`  
+**Base:** `main...HEAD` @ `87aaab64`  
 **Initial review:** 2026-06-12  
-**Re-reviewed:** 2026-06-16 (`e853b0eb` unchanged; backend `2666c77` changed contract behavior)  
+**Re-reviewed:** 2026-06-16 (`87aaab64` — merge with main; import-tool/video-library diff unchanged since `e853b0eb`)  
 **Scope:** Video Library import-tool integration + app-user sports-profile form refactor (Critical / High only)  
 **Prompts:** `frontend-system-prompt.md` (DRY / KISS / Global consistency / Contract / protected modules)
 
@@ -35,7 +35,7 @@
 | `src/pages/videoLibrary/dashboard/constants.ts` | Shared CSV labels, headers, hints, sample row |
 | `src/pages/videoLibrary/dashboard/export-video-library-csv.ts` | Use `VIDEO_LIBRARY_CSV_COLUMN_LABELS` |
 
-**App-user onboarding (bundled — `e853b0eb`)**
+**App-user onboarding (bundled)**
 
 | File | Change |
 |------|--------|
@@ -43,7 +43,7 @@
 | `src/pages/management/app-users/onboarding/components/app-user-sports-profile-fields.tsx` | `SportSelectField` with `visible` prop |
 | `src/pages/management/app-users/onboarding/utils.ts` | Safer patch payload trimming + `isAthlete` option |
 
-### DRY / KISS / Global consistency scan
+### DRY / KISS / Reusability / Global consistency scan
 
 | Check | Verdict |
 |-------|---------|
@@ -51,27 +51,22 @@
 | Import-tool reuses video-library constants (hints, headers, sample) | ✅ |
 | `ImportEntityContractChecks` satisfied | ✅ |
 | CSV column order matches backend `IMPORT_TOOL_VIDEO_LIBRARY_HEADERS` | ✅ |
-| Upload date export format vs backend validation | ⚠️ Depends on backend contract; frontend path unchanged |
+| Export date formatting vs backend read-only validation | ✅ N/A — backend no longer validates display columns |
 | App-user `buildAppUserPatchPayload(..., { isAthlete: effectiveRole })` | ✅ Fixes edit-mode role vs form role mismatch |
-| App-user sport fields use `display:none` vs conditional unmount | ✅ Accepted — `handleSportChange` still clears invalid selects |
 | Protected table/pagination modules untouched | ✅ |
 
 ### Positive notes
 
 - **DRY:** Shared CSV column labels prevent export/import header drift.
-- **UX:** Workflow hints describe export → edit Event/Athlete → import clearly.
-- **App-user fix:** Patch uses `effectiveRole` for sports-profile inclusion — avoids omitting profile on athlete edit when form role field differs.
-- **Banner layout:** Entity-selected banner hint prop supports longer video-library copy without breaking download button alignment.
-
-### Developer response (upload-date validation)
-
-Team requirement remains: Upload date is non-editable and edited values should produce a validation error. Backend commit `2666c77` changed this behavior by removing Upload-date validation; blocker is tracked in [backend.md](./backend.md).
+- **UX:** Workflow hints describe export → fill Event/Athlete → import clearly.
+- **App-user fix:** Patch uses `effectiveRole` for sports-profile inclusion.
+- **Aligned with backend:** Frontend export path unchanged; no TZ mismatch risk once backend dropped display-column validation.
 
 ---
 
 ## GitHub comments (Open findings)
 
-No frontend-only High/Critical findings.
+No open findings.
 
 ---
 
@@ -79,10 +74,12 @@ No frontend-only High/Critical findings.
 
 No open High/Critical findings in this frontend diff.
 
+---
+
 ## Summary
 
 | # | Title | Risk | Status | File | Lines | PR comment line |
 |---|--------|------|--------|------|-------|-----------------|
 | — | — | — | — | — | — | — |
 
-**Merge readiness:** **Merge-ready** — no open Critical/High blockers across frontend/backend reports (backend High is accepted).
+**Merge readiness:** **Merge-ready** — no open Critical/High blockers. Backend accepted finding tracked in [backend.md](./backend.md).
