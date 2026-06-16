@@ -2,6 +2,8 @@
 
 Review currently opened PR files in **skillshow** (main API).
 
+**Security policy (mandatory):** Every review must enforce `pr-review/SECURITY-AUDIT-PRE-RELEASE.md`. Treat regressions, bypasses, or new code that violates that policy as **CRITICAL** or **HIGH**. Tag findings **Security** (and sub-tags: **RBAC**, **IDOR**, **Auth**, **S3**, etc.) in Description.
+
 ## DRY & KISS (mandatory — always enforce)
 
 Every review **must** actively hunt for DRY and KISS violations. Do not skip this lens. Report findings when rules below are broken at the stated severity.
@@ -123,6 +125,89 @@ When the PR adds or changes **admin list endpoints**, **aggregation list queries
 
 Tag **Protected module** and/or **Contract** in Description. When the ticket includes a frontend review, cross-check `pr-review/{TICKET}/frontend.md` for list-control / sort / pagination / audit-log UI alignment.
 
+## Security policy (mandatory — always enforce)
+
+**Source of truth:** `pr-review/SECURITY-AUDIT-PRE-RELEASE.md` (pre-release audit, 2026-06-15). Re-check the PR diff against every rule below. Do **not** skip this lens. Report **CRITICAL** / **HIGH** for violations and regressions; flag **Security** in Description.
+
+### RBAC & route authorization
+
+1. **Never weaken route auth** — Do not comment out, remove, or bypass `authorize({ permissions, operation })` or `authorize({ roles })` on `/v1/*` routes. JWT-only (`authenticate` without `authorize`) is insufficient for mutations and admin reads unless explicitly documented and approved.
+2. **No no-op RBAC** — `authorize({})` (JWT-only) is not acceptable on sensitive routes (exports, admin lists, PII search). Use explicit `permissions` / `roles` matching service-layer intent.
+3. **Defense in depth** — Route-level `authorize` **and** service-layer ownership/scoping checks where both apply. Do not add endpoints that rely solely on “maybe the service checks it.”
+4. **Admin role gates** — Routes using `roles: ["admin"]` must account for `super_admin` (include both in `roles` array **or** hierarchy in `RBACService.hasAnyRole`). Do not introduce new admin-only surfaces that block `super_admin` without reason.
+5. **System roles** — Block mutation of `role.system` roles (rename, `system: false`, permission changes) unless caller is `super_admin` with explicit maintenance path. Never re-comment system-role guards.
+6. **Protected role assignment** — `POST /users`, `POST /users/:id/roles`, and similar must validate `roleIds` against `PROTECTED_ROLE_NAMES` (`admin`, `super_admin`, `crew`, `editor`); only elevated principals may assign them.
+7. **Public path allowlist** — Auth bypass paths must use **exact** path matching (`path === "/v1/users/check-username"`), not `endsWith` suffixes that accidentally expose future routes.
+
+### IDOR & resource ownership
+
+1. **ID-scoped reads/writes** — Before returning or proxying data by `videoId`, `jobId`, `userId`, `entityId`, etc., assert the caller owns the resource or has an accepted relation (parent/coach/admin). Reuse existing `athleteService` / domain ownership helpers — do not proxy to orchestrator or DB with only JWT.
+2. **No orphan broad match** — Mongo filters must not include `{ user: null }` / `{ user: { $exists: false } }` branches for non-admin callers. Orphan records are admin/service-only.
+3. **404 on mismatch** — Return 404 (not 403) on ownership failure where enumeration is a concern.
+4. **List/export scoping** — `listForExport`, `listByUser`, and similar must scope by caller; every export table needs explicit permission in route **and** service (`assertCanExport` pattern). No `case` branches that `return` without an auth check.
+5. **Cache keys** — Flush/invalidate only caller-scoped keys (e.g. `video-stats/{userId}`), not entire namespaces, unless route is admin-only.
+
+### Authentication & session
+
+1. **HTTP auth baseline** — `authenticate` must enforce JWT validity **plus** `isActive`, `!isDeleted`, and `tokensValidAfter` (post-password-reset invalidation).
+2. **Socket parity** — `socket.middleware.ts` must reuse the same post-verify user checks as `auth.middleware.ts`; no signature-only WebSocket auth.
+3. **No query-string tokens in production** — `extractToken` must not accept `?token=` / `headers.token` outside development. Morgan/access logs must redact token query params.
+4. **Refresh rotation** — Preserve refresh-token rotation on use (revoke old before issuing new). Do not weaken replay protection.
+5. **Auth rate limits** — Login, OTP, register, and password-reset routes need stricter per-route / per-email limiters beyond the global IP cap.
+
+### Uploads, S3 & secrets
+
+1. **User-scoped keys** — S3 upload keys must be prefixed `uploads/{userId}/` (or per-session UUID under caller namespace). `keyFromFileName` must not produce global `uploads/{fileName}`.
+2. **Key validation on bind** — `POST /videos` and `recordUpload` must validate `key` belongs to the caller’s allowed prefix before persisting or returning a public URL.
+3. **Validated upload bodies** — All upload endpoints use Joi (`presignedUrlBodySchema` or dedicated schema); no unvalidated arbitrary `key` in body.
+4. **Production secrets** — `DISTRIBUTION_SERVICE_TOKEN`, `VIDEO_URL_KEY_MASTER_SECRET`, and similar must fail fast at startup when empty in production — no silent `""` defaults.
+
+### OAuth, docs & public surfaces
+
+1. **OAuth state** — Store in Redis with TTL and atomic single-use consume; not in-process `Map` (breaks multi-instance, weak binding).
+2. **Swagger** — `/api-docs` disabled or auth-gated in production (`NODE_ENV === 'production'`).
+3. **Public endpoints** — `POST /client-errors`, `/vendors/complete`, and similar need rate limits, payload size/field allowlists, and documented threat model. Do not expand unauthenticated persistence without review.
+4. **PII search** — User search (`/users/search`) requires RBAC or masking for non-admins, minimum query length, and rate limits.
+
+### Privilege & data integrity
+
+1. **Raw collection bypass** — Avoid `Model.collection.findOneAndUpdate` that resurrects soft-deleted rows (role-permission upserts) without system-role blocks and audit logging.
+2. **Audit sensitive mutations** — User delete, role assignment, permission matrix changes, and privileged grants should log actor, target, and before/after where the codebase already centralizes audit patterns.
+3. **Registration allowlist** — Public `POST /auth/register` stays limited to `athlete` / `parent` / `coach`; privileged creation only via guarded admin paths.
+
+### Security regression checks (reviewer must)
+
+When the PR touches **routes**, **middleware**, **controllers**, **auth**, **upload**, **distribution**, **analytics**, **user/role/permission**, or **export** code:
+
+1. Scan for commented `authorize`, `// if (role.system`, or TODO auth bypasses — report **CRITICAL**.
+2. Scan new `GET`/`POST` by resource ID — confirm ownership assertion exists before read/write/proxy.
+3. Scan new presigned URL / S3 key logic — confirm user prefix and validation on record/create.
+4. Scan new `authorize({})` or auth-only admin endpoints — report **HIGH**.
+5. If PR **fixes** an audit finding, verify the fix is complete (not partial) and does not reintroduce bypass elsewhere in the diff.
+
+### When to report (security)
+
+| Violation | Severity |
+|-----------|----------|
+| Commented/removed `authorize` on mutation or admin route | **CRITICAL** |
+| Any authenticated user can create/delete users or assign privileged roles | **CRITICAL** |
+| System role mutation guard disabled or bypassed | **CRITICAL** |
+| IDOR: read/write/proxy by ID without ownership check | **HIGH** or **CRITICAL** |
+| Unscoped S3 keys or unvalidated `key` on video/upload record | **HIGH** |
+| `authorize({})` or JWT-only on sensitive export/admin/PII route | **HIGH** |
+| Socket auth weaker than HTTP auth | **HIGH** |
+| Query-string JWT accepted in production or logged | **HIGH** |
+| Swagger public in production | **HIGH** |
+| Global cache flush by non-admin caller | **HIGH** |
+| Broad `$or` null-user filter for non-admin | **HIGH** |
+| In-memory OAuth state in multi-instance path | **HIGH** |
+| Missing Joi on upload/auth mutation body | **HIGH** |
+| Empty required secrets allowed in production config | **HIGH** |
+| `endsWith` auth bypass instead of exact path | **HIGH** |
+| New code reintroduces a fixed audit finding (see SECURITY-AUDIT doc) | **CRITICAL** or **HIGH** |
+
+In **Description** / **Recommendation**, cite the matching finding number from `SECURITY-AUDIT-PRE-RELEASE.md` when applicable (e.g. “regression of audit #4”). Recommend integration tests for RBAC matrix and IDOR when fixing or adding endpoints.
+
 ## Focus on
 
 ### Layer separation & architecture (skillshow)
@@ -147,9 +232,10 @@ Tag **Protected module** and/or **Contract** in Description. When the ticket inc
 
 - Request input validated with Joi in `src/validation/` and wired via `validate()` middleware on routes — not ad-hoc `req.body` checks in controllers
 - Query params use `req.validatedQuery` after `validate(schema, "query")`; do not trust raw `req.query` for typed/coerced values
-- Auth/permission middleware applied on protected routes; no sensitive data in responses (passwords, tokens, internal IDs leaked unnecessarily)
+- **Security policy** — enforce full `## Security policy` section above on every PR; see `pr-review/SECURITY-AUDIT-PRE-RELEASE.md`
 - Consistent responses via `ReS` / `ReE` and `BaseController`; appropriate HTTP status codes
 - ObjectId conversion via repository/base helpers (`toObjectId`); invalid IDs handled before DB calls where the pattern exists
+- No sensitive data in responses (passwords, tokens, full unmasked PII); no secrets in logs
 
 ### Types, constants & module placement (skillshow)
 
@@ -176,7 +262,9 @@ Tag **Protected module** and/or **Contract** in Description. When the ticket inc
 
 Report **Critical** and **High** only (skip Medium, Low, Info unless asked).
 
-For layer placement, types/constants, logging, **DRY**, **KISS**, and **Global consistency** issues, report **High** when they cause incorrect behavior, security exposure, serious performance risk, duplicated logic that will drift, incomplete migration of shared changes across the PR, or clear maintainability debt at scale; skip cosmetic one-offs.
+**Security:** Always report **CRITICAL** / **HIGH** for policy violations in `## Security policy` and `SECURITY-AUDIT-PRE-RELEASE.md` — never downgrade auth bypass, IDOR, or privilege-escalation paths to “out of scope.”
+
+For layer placement, types/constants, logging, **DRY**, **KISS**, **Global consistency**, and **Security** issues, report **High** when they cause incorrect behavior, security exposure, serious performance risk, duplicated logic that will drift, incomplete migration of shared changes across the PR, or clear maintainability debt at scale; skip cosmetic one-offs.
 
 ## Finding report format
 
@@ -191,7 +279,7 @@ File Path: [repo-relative path under skillshow/, e.g. src/services/...]
 Lines: [line or range, e.g. 121 or 84-113]
 
 Description:
-[What the code does wrong; be specific.]
+[What the code does wrong; be specific. Tag **Security** / **RBAC** / **IDOR** / etc. when applicable; cite `SECURITY-AUDIT-PRE-RELEASE.md` finding # if relevant.]
 
 Impact:
 - [User-visible or operational consequence]
