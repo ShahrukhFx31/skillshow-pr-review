@@ -41,6 +41,6 @@ This bumps `editRequest` email limits from 20→200 per user/hour and drops `per
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | EditRequest email rate limiting loosened significantly | HIGH | Open | `src/constants/notification-platform.constants.ts` | 76-85 |
+| 1 | EditRequest email rate limiting loosened significantly | HIGH | ✅ Fixed | `src/constants/notification-platform.constants.ts` | 76-85 |
 
-**Merge readiness:** Open High blocker (rate limiting change needs explicit justification/mitigation).
+**Merge readiness:** No open Critical/High blockers.

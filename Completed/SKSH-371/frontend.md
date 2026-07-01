@@ -41,6 +41,6 @@ PR comment (inline, 2–4 sentences):
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Deep-link param can get “stuck” on invalid `relationId` | MEDIUM | Open | `src/pages/user/account/connections/hooks/use-connection-relation-deep-link.ts` | 29-44 |
+| 1 | Deep-link param can get “stuck” on invalid `relationId` | MEDIUM | ✅ Fixed | `src/pages/user/account/connections/hooks/use-connection-relation-deep-link.ts` | 29-44 |
 
-**Merge readiness:** No open Critical/High blockers (1 Medium Open).
+**Merge readiness:** No open Critical/High/Medium blockers.
