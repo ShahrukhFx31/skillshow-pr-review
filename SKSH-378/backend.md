@@ -1,82 +1,63 @@
-# PR review (SKSH-378) — skillshow
+# PR review — SKSH-378 (skillshow)
 
-PR: `https://github.com/SkillshowFx/skillshow/pull/225`  
-Base: `main`  
-Head: `SKSH-378` @ `761e7cac`
-
-Prompt: `pr-review/prompts/backend-system-prompt.md`
+| Field | Value |
+|-------|-------|
+| PR | [#225](https://github.com/SkillshowFx/skillshow/pull/225) |
+| Branch | `SKSH-378` → `main` |
+| Head | `SKSH-378` @ `1110e9e7` |
+| Scope | S3 upload key safety + multipart follow-up contract; fix “same-name approved video” promoted storage collisions |
+| Prompt | `pr-review/prompts/backend-system-prompt.md` |
 
 ## GitHub comments
 
-### `src/controllers/upload.controller.ts`
-- **CRITICAL** — Multipart upload regenerates a new UUID key on every step (line 22)
-
-### `src/services/edit-request-output.service.ts`
-- **HIGH** — Thumbnail may not be copied when main video key is re-scoped (summary-only; see finding #2)
+_No open inline findings._
 
 ## Findings
 
 ---
-Multipart upload regenerates a new UUID key on every step
+Multipart upload must reuse server-returned key (previous blocker now fixed)
 
-Risk Level: CRITICAL  
-File Path: src/controllers/upload.controller.ts  
-Lines: 21-23
-
-Description:
-**Contract / operational correctness.** `uploadKeyForUser` now calls `uniqueKeyFromUserFileName`, which embeds a new `randomUUID()` on every invocation. Multipart endpoints (`start`, `presigned-urls`, `complete`, `abort`) derive the S3 key from `fileName` on each request and do not accept the `key` returned by `start`.
-
-The admin UI (`uploadService.ts`, `s3-file-upload.utils.ts`) only passes `fileName` + `uploadId` after start; it keeps `key` for `recordUpload` but not for subsequent multipart calls.
-
-Impact:
-- Part presigned URLs target a different object than the multipart upload started with.
-- `completeMultipartUpload` finalizes yet another key.
-- Large file uploads (>10 MB) fail or leave orphaned multipart state in S3.
-- Affects general upload routes and any flow using shared multipart helpers (e.g. edit-request output uploads).
-
-Recommendation:
-Do **not** use `uniqueKeyFromUserFileName` for multipart steps that re-derive the key from `fileName`. Prefer one of:
-1. Add required `key` to multipart request bodies (client passes the `key` from `start`), **or**
-2. Keep `keyFromUserFileName` for multipart-only paths and use `uniqueKeyFromUserFileName` only for single-shot presigned uploads where the returned `key` is carried through the whole flow.
-
-Add an integration test that asserts `start` → `presigned-urls` → `complete` use the same key when mocks return distinct UUIDs.
-
----
-
-PR comment (inline):
-`uniqueKeyFromUserFileName` generates a new UUID per call, but multipart handlers invoke `uploadKeyForUser(fileName)` on every step while clients only send `fileName` + `uploadId`. That breaks the multipart pipeline (parts upload to a different key than `start`/`complete`). Require `key` on multipart bodies or reserve unique keys for single-shot presigned uploads only.
-
----
-Thumbnail may not be copied when main video key is re-scoped
-
-Risk Level: HIGH  
-File Path: src/services/edit-request-output.service.ts  
-Lines: 1543-1558 (approx. in PR head)
+Risk Level: CRITICAL
+File Path: src/controllers/upload.controller.ts
+Lines: 18-34, 75-106, 133-146
 
 Description:
-**Operational correctness.** When `resolvePromotedSkillshowVideoStorage` copies the main video to a version-scoped key due to `(user, key)` collision, thumbnail re-scoping only runs when `findSkillshowUploadedIdByUserAndKey` finds an existing **video** row whose `key` equals `version.thumbnailKey`. Thumbnail keys are rarely stored as video `key`, so promoted outputs often keep the editor's thumbnail S3 path while the video object was copied under the athlete namespace.
+Previously this PR had a risk of regenerating a new UUID key on each multipart step if only `fileName` was provided, breaking multipart integrity. The current diff fixes this by requiring `key` on multipart follow-up steps and validating it via `s3Service.isUploadKeyAllowedForUser` before issuing part URLs / completing / aborting.
 
 Impact:
-- Second+ approved outputs with the same source filename can reference a thumbnail object outside the athlete-scoped promoted key layout.
-- If the editor/source thumbnail is deleted or permissions change, the athlete-facing promoted video may lose its thumbnail while the main video plays.
+- Prevents multipart uploads from breaking due to key mismatch across steps.
+- Improves security by enforcing user-scoped key validation for multipart follow-ups (**Security / S3**).
 
 Recommendation:
-When copying the main object to `versionScopedKey`, also copy the thumbnail to `skillshowPromotedKeyFromUserVersion(..., versionId + '-thumb', ...)` whenever `version.thumbnailKey` is present (mirror main-key collision handling), not only when a video row already exists for the thumbnail key.
-
+✅ Fixed as implemented: keep `resolveMultipartUploadKey()` and ensure routes stay wired to `multipart*BodySchema` validators so clients must send `key`.
 ---
 
-### Positive notes
+---
+Thumbnail is copied when promoted video key is re-scoped (previous blocker now fixed)
 
-- **Root cause fix for duplicate promotions:** Version-scoped athlete keys + `findPromotedSkillshowVideoId` correctly handle multiple approved outputs sharing the same source S3 key.
-- **S3 safety:** `skillshowPromotedKeyFromUserVersion` stays under `uploads/{userId}/`; `copyObject` is internal to approve flow.
-- **Single-shot uploads:** `getPresignedUrl` / `recordUpload` / `video-upload.service` correctly return and reuse one unique key.
-- **Tests:** Good coverage for collision vs non-collision promote paths and `uniqueKeyFromUserFileName` behavior.
+Risk Level: HIGH
+File Path: src/services/edit-request-output.service.ts
+Lines: 1496-1650 (approx; new helpers `resolvePromotedSkillshowVideoStorage` / `findPromotedSkillshowVideoId`)
+
+Description:
+Previously, promoted outputs could end up reusing the same underlying S3 key (same filename), causing collisions; and thumbnail could remain pointing at the shared/editor key. The current diff resolves this by:
+- Detecting collisions for the athlete+key mapping.
+- Copying the source object to an athlete+version-scoped key when needed.
+- Re-scoping/copying thumbnails alongside the main copy.
+
+Impact:
+- Prevents “same-name approved video” overwrites/collisions.
+- Ensures promoted videos and thumbnails remain correctly associated to the athlete/version.
+
+Recommendation:
+✅ Fixed as implemented: keep the collision check + copy flow and associated tests.
+---
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Multipart upload regenerates a new UUID key on every step | CRITICAL | Open | `src/controllers/upload.controller.ts` | 21-23 |
-| 2 | Thumbnail may not be copied when main video key is re-scoped | HIGH | Open | `src/services/edit-request-output.service.ts` | ~1543-1558 |
+| 1 | Multipart upload must reuse server-returned key (previous blocker now fixed) | CRITICAL | ✅ Fixed | src/controllers/upload.controller.ts | 18-34, 75-106, 133-146 |
+| 2 | Thumbnail is copied when promoted video key is re-scoped (previous blocker now fixed) | HIGH | ✅ Fixed | src/services/edit-request-output.service.ts | ~1496-1650 |
 
-**Merge readiness:** Open Critical/High blockers — multipart upload regression must be fixed before merge.
+**Merge readiness:** No open Critical/High blockers. The diff addresses prior concerns by enforcing user-scoped `key` for multipart follow-ups and by re-scoping/copying promoted outputs (and thumbnails) to avoid collisions when filenames repeat.
