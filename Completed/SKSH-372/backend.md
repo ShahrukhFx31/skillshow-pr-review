@@ -2,7 +2,8 @@
 
 PR: `https://github.com/SkillshowFx/skillshow/pull/224`  
 Base: `main`  
-Head: `SKSH-372` @ `70ce8af`
+Head: `SKSH-372` @ `70ce8af`  
+**Re-review:** 2026-07-01 @ `70ce8af` (unchanged)
 
 Prompt: `pr-review/prompts/backend-system-prompt.md`
 
