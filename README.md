@@ -91,4 +91,5 @@ Archived under `pr-review/Completed/` when all findings are **Fixed** or **Accep
 | SKSH-327 | `frontend.md`, `backend.md` |
 | SKSH-334 | `frontend.md`, `backend.md` |
 | SKSH-376 | `frontend.md` |
+| SKSH-380 | `frontend.md` |
 | SKSH-115 | `frontend.md`, `backend.md` |
