@@ -4,22 +4,14 @@
 |-------|-------|
 | PR | [#216](https://github.com/SkillshowFx/skillshow/pull/216) |
 | Branch | `refactor-workflow` → `main` |
+| Head | `32f9a06a` |
 | Scope | Simplify manual deploy workflow; staging VM zip-based releases; production Buildx + ECS trigger |
 | Prompt | `pr-review/prompts/backend-system-prompt.md` |
+| Re-reviewed | 2026-07-06 @ `32f9a06a` |
 
 ## GitHub comments
 
-### `.github/workflows/deploy.yml` (line 173)
-
-**HIGH** — Production deploy no longer waits for ECS service stability
-
-### `scripts/deploy-staging-vm.sh` (line 97)
-
-**HIGH** — Staging `current` symlink flipped before `npm ci` succeeds
-
-### `scripts/deploy-staging-vm.sh` (line 71)
-
-**MEDIUM** — SSH uses `StrictHostKeyChecking=accept-new` without pinned host key
+_No open inline findings._
 
 ## Findings
 
@@ -28,69 +20,49 @@ Production deploy no longer waits for ECS service stability
 
 Risk Level: HIGH
 File Path: .github/workflows/deploy.yml
-Lines: 170-181
+Lines: 176-187
 
 Description:
-The PR removes the `aws ecs wait services-stable` step and ends the production job after `ecs update-service --force-new-deployment`. The workflow now reports success when the rollout is **triggered**, not when tasks pass health checks and the service reaches a steady state.
+The PR removes the `aws ecs wait services-stable` step and ends the production job after `ecs update-service --force-new-deployment`. The workflow reports success when the rollout is **triggered**, not when tasks pass health checks and the service reaches a steady state.
 
 Impact:
-- Failed or stuck ECS rollouts (bad image, task crash loop, capacity issues) will not fail the GitHub Actions run.
-- Operators may assume production is healthy while the service is still draining old tasks or failing new ones.
+- Failed or stuck ECS rollouts will not fail the GitHub Actions run.
+- Operators verify rollout health outside the workflow (ECS console, alarms, or manual follow-up).
 
 Recommendation:
-Restore a wait/verification step after `update-service`, e.g.:
-
-```yaml
-aws ecs wait services-stable \
-  --cluster "${ECS_CLUSTER}" \
-  --services "${ECS_SERVICE}" \
-  --region "${AWS_REGION}"
-```
-
-If full wait is too slow, at minimum poll deployment rollout state and fail the job when the primary deployment ends in `FAILED`.
+**Accepted (intentional).** Team prefers a fast trigger-only production job; monitor ECS deployment status separately rather than blocking the workflow on `services-stable`.
 
 ---
 Staging `current` symlink flipped before `npm ci` succeeds
 
 Risk Level: HIGH
 File Path: scripts/deploy-staging-vm.sh
-Lines: 95-103
+Lines: 109-112
 
 Description:
-After unzip, the script immediately runs `ln -sfn ... current` and only then executes `npm ci --omit=dev`. With `set -euo pipefail`, a failed `npm ci` aborts the script **after** `current` already points at the new release directory without installed dependencies.
+Initial review: after unzip, the script symlinked `current` before `npm ci`, so a failed install could leave staging on a broken release.
 
 Impact:
-- A transient registry/network failure during `npm ci` can leave staging serving from a broken `current` release (no `node_modules`, pm2 not restarted or started against incomplete tree).
-- Prior release remains on disk but is no longer active.
+- (Resolved) Transient `npm ci` failures no longer repoint `current` before dependencies are installed.
 
 Recommendation:
-Install dependencies before activating the release, then swap atomically:
-
-```bash
-cd "${APP_DIR}/releases/${RELEASE_NAME}"
-npm ci --omit=dev --no-audit --no-fund
-ln -sfn "${APP_DIR}/releases/${RELEASE_NAME}" "${APP_DIR}/current"
-# pm2 reload/start using ${APP_DIR}/current
-```
-
-Optionally keep the previous `current` symlink until pm2 reload succeeds.
+✅ Fixed on `41215491` — remote script runs `npm ci` in `RELEASE_DIR`, then `ln -sfn` to `current`. Rollback script updated with the same order.
 
 ---
 SSH uses `StrictHostKeyChecking=accept-new` without pinned host key
 
 Risk Level: MEDIUM
 File Path: scripts/deploy-staging-vm.sh
-Lines: 71
+Lines: 76-81
 
 Description:
-**Security.** Deploy and rollback scripts connect with `-o StrictHostKeyChecking=accept-new`, which trusts the host key on first connect. On a compromised network or DNS hijack during the first connection, the runner could upload release artifacts or env content to an attacker-controlled host.
+**Security.** Initial review: deploy script used `StrictHostKeyChecking=accept-new` on ephemeral runners.
 
 Impact:
-- First-connection MITM could exfiltrate `STAGE_ENV` and deployment artifacts.
-- Lower risk after host key is cached, but CI runners are ephemeral so `accept-new` applies on every run.
+- (Resolved) Host key is now supplied via `SSH_KNOWN_HOSTS` / `SKILLSHOW_STAGE_VM_SSH_KNOWN_HOSTS` with `StrictHostKeyChecking=yes` and a dedicated `UserKnownHostsFile`.
 
 Recommendation:
-Pin the staging VM host key via a repository secret (e.g. `SKILLSHOW_STAGE_VM_SSH_HOST_KEY`) and use `StrictHostKeyChecking=yes` with `UserKnownHostsFile` populated from that secret, or bake the known_hosts entry into the workflow before calling the script.
+✅ Fixed on `32f9a06a` — workflow passes `SSH_KNOWN_HOSTS`; deploy and rollback scripts pin known hosts before SSH/SCP.
 
 ---
 
@@ -98,8 +70,8 @@ Pin the staging VM host key via a repository secret (e.g. `SKILLSHOW_STAGE_VM_SS
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Production deploy no longer waits for ECS service stability | HIGH | Open | .github/workflows/deploy.yml | 170-181 |
-| 2 | Staging `current` symlink flipped before `npm ci` succeeds | HIGH | Open | scripts/deploy-staging-vm.sh | 95-103 |
-| 3 | SSH uses `StrictHostKeyChecking=accept-new` without pinned host key | MEDIUM | Open | scripts/deploy-staging-vm.sh | 71 |
+| 1 | Production deploy no longer waits for ECS service stability | HIGH | Accepted | .github/workflows/deploy.yml | 176-187 |
+| 2 | Staging `current` symlink flipped before `npm ci` succeeds | HIGH | ✅ Fixed | scripts/deploy-staging-vm.sh | 109-112 |
+| 3 | SSH uses `StrictHostKeyChecking=accept-new` without pinned host key | MEDIUM | ✅ Fixed | scripts/deploy-staging-vm.sh | 76-81 |
 
-**Merge readiness:** Blocked — restore production rollout verification and make staging release activation atomic after dependency install.
+**Merge readiness:** No open Critical/High/Medium blockers. ECS trigger-only production deploy accepted by team; staging atomic activation and SSH host pinning resolved.
