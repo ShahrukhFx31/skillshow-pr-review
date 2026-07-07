@@ -4,16 +4,14 @@
 |-------|-------|
 | PR | [#229](https://github.com/SkillshowFx/skillshow/pull/229) |
 | Branch | `feat/migrate-s3-cloudfront` → `main` |
-| Head | `747e6e0c` |
+| Head | `959d6cc0` |
 | Scope | CloudFront signed GET delivery; S3 presigned GET/attachment delegation; env/config + DevOps docs |
 | Prompt | `pr-review/prompts/backend-system-prompt.md` |
-| Re-reviewed | 2026-07-07 @ `747e6e0c` |
+| Re-reviewed | 2026-07-07 @ `959d6cc0` |
 
 ## GitHub comments
 
-### `src/services/cloudfront.service.ts` (line 28)
-
-**MEDIUM** — Unsigned `buildObjectUrl` requires signing private key
+_No open inline findings._
 
 ## Findings
 
@@ -54,17 +52,16 @@ Unsigned `buildObjectUrl` requires signing private key
 
 Risk Level: MEDIUM
 File Path: src/services/cloudfront.service.ts
-Lines: 26-33
+Lines: 35-42
 
 Description:
-`buildObjectUrl` (used by `s3Service.getPublicUrl` for stored `location` metadata on upload record endpoints) calls `assertSigningConfig()`, which requires domain, key pair id, **and** private key. Constructing an unsigned distribution URL only needs `CLOUDFRONT_DOMAIN`.
+Initial review: `buildObjectUrl` called `assertSigningConfig()`, requiring private key even for unsigned `location` metadata URLs.
 
 Impact:
-- Upload record / video create flows fail unless full signing material is present, even though the returned URL is not signed.
-- Harder local/staging bootstrap when only the distribution domain is configured.
+- (Resolved) `buildObjectUrl` now uses `assertDomainConfig()` only; signing key checks remain on `signUrl` / `getSignedGetUrl`.
 
 Recommendation:
-Split config checks: `assertDomainConfigured()` for `buildObjectUrl`; keep full signing assertions on `signUrl` / `getSignedGetUrl` only.
+✅ Fixed on `959d6cc0` — split `assertDomainConfig` / `assertSigningConfig`; test `buildObjectUrl requires only CLOUDFRONT_DOMAIN` added.
 
 ---
 
@@ -74,6 +71,6 @@ Split config checks: `assertDomainConfigured()` for `buildObjectUrl`; keep full 
 |---|--------|------|--------|------|-------|
 | 1 | Production may fall back to staging CloudFront private key | HIGH | ✅ Fixed | src/utils/cloudfront-private-key.utils.ts | 27-39 |
 | 2 | `cloudfront_secret` PEMs copied into `dist` without gitignore guard | HIGH | ✅ Fixed | src/scripts/copyTemplates.ts | 8-9 |
-| 3 | Unsigned `buildObjectUrl` requires signing private key | MEDIUM | Open | src/services/cloudfront.service.ts | 26-33 |
+| 3 | Unsigned `buildObjectUrl` requires signing private key | MEDIUM | ✅ Fixed | src/services/cloudfront.service.ts | 35-42 |
 
-**Merge readiness:** No open Critical/High blockers. One Medium follow-up on `buildObjectUrl` domain-only config check (optional before merge if env always supplies full signing material).
+**Merge readiness:** No open Critical/High/Medium blockers. CloudFront migration ready for OAC cutover once `CLOUDFRONT_*` env vars are set in staging/production.
