@@ -2,18 +2,35 @@
 
 | Field | Value |
 |-------|-------|
-| PR | [#216](https://github.com/SkillshowFx/skillshow/pull/216) |
+| PR | [#230](https://github.com/SkillshowFx/skillshow/pull/230) |
 | Branch | `refactor-workflow` → `main` |
-| Head | `32f9a06a` |
-| Scope | Simplify manual deploy workflow; staging VM zip-based releases; production Buildx + ECS trigger |
+| Head | `ef9a854f` |
+| Scope | Staging VM deploy script — correct SCP port flag |
 | Prompt | `pr-review/prompts/backend-system-prompt.md` |
-| Re-reviewed | 2026-07-06 @ `32f9a06a` |
+| Re-reviewed | 2026-07-07 @ `ef9a854f` |
 
 ## GitHub comments
 
 _No open inline findings._
 
 ## Findings
+
+---
+scp reused SSH_OPTS with `-p` instead of `-P` for remote port
+
+Risk Level: HIGH
+File Path: scripts/deploy-staging-vm.sh
+Lines: 83-97
+
+Description:
+**DRY / correctness.** `SSH_OPTS` uses `-p "$SSH_PORT"` (valid for `ssh`). The prior `scp "${SSH_OPTS[@]}"` call passed the same `-p` flag to `scp`, where `-p` means preserve file timestamps — not port. `scp` requires capital `-P` for the remote port. With a non-default `SSH_PORT`, the upload step could fail (treating the port number as a path) or connect on the wrong port.
+
+Impact:
+- Staging zip upload via `scp` may fail or skip the configured port when `SSH_PORT` ≠ 22.
+- Deploy workflow reports failure at archive upload despite valid SSH connectivity for other steps.
+
+Recommendation:
+✅ Fixed — introduce `SCP_OPTS` mirroring host-key and identity options but using `-P "$SSH_PORT"`. Keep `SSH_OPTS` with `-p` for `ssh` calls.
 
 ---
 Production deploy no longer waits for ECS service stability
@@ -23,7 +40,7 @@ File Path: .github/workflows/deploy.yml
 Lines: 176-187
 
 Description:
-The PR removes the `aws ecs wait services-stable` step and ends the production job after `ecs update-service --force-new-deployment`. The workflow reports success when the rollout is **triggered**, not when tasks pass health checks and the service reaches a steady state.
+The workflow removes the `aws ecs wait services-stable` step and ends the production job after `ecs update-service --force-new-deployment`. The workflow reports success when the rollout is **triggered**, not when tasks pass health checks and the service reaches a steady state.
 
 Impact:
 - Failed or stuck ECS rollouts will not fail the GitHub Actions run.
@@ -46,7 +63,7 @@ Impact:
 - (Resolved) Transient `npm ci` failures no longer repoint `current` before dependencies are installed.
 
 Recommendation:
-✅ Fixed on `41215491` — remote script runs `npm ci` in `RELEASE_DIR`, then `ln -sfn` to `current`. Rollback script updated with the same order.
+✅ Fixed on `41215491` — remote script runs `npm ci` in `RELEASE_DIR`, then `ln -sfn` to `current`.
 
 ---
 SSH uses `StrictHostKeyChecking=accept-new` without pinned host key
@@ -62,7 +79,7 @@ Impact:
 - (Resolved) Host key is now supplied via `SSH_KNOWN_HOSTS` / `SKILLSHOW_STAGE_VM_SSH_KNOWN_HOSTS` with `StrictHostKeyChecking=yes` and a dedicated `UserKnownHostsFile`.
 
 Recommendation:
-✅ Fixed on `32f9a06a` — workflow passes `SSH_KNOWN_HOSTS`; deploy and rollback scripts pin known hosts before SSH/SCP.
+✅ Fixed on `32f9a06a` — workflow passes `SSH_KNOWN_HOSTS`; deploy script pins known hosts before SSH/SCP.
 
 ---
 
@@ -70,8 +87,9 @@ Recommendation:
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Production deploy no longer waits for ECS service stability | HIGH | Accepted | .github/workflows/deploy.yml | 176-187 |
-| 2 | Staging `current` symlink flipped before `npm ci` succeeds | HIGH | ✅ Fixed | scripts/deploy-staging-vm.sh | 109-112 |
-| 3 | SSH uses `StrictHostKeyChecking=accept-new` without pinned host key | MEDIUM | ✅ Fixed | scripts/deploy-staging-vm.sh | 76-81 |
+| 1 | scp reused SSH_OPTS with `-p` instead of `-P` for remote port | HIGH | ✅ Fixed | scripts/deploy-staging-vm.sh | 83-97 |
+| 2 | Production deploy no longer waits for ECS service stability | HIGH | Accepted | .github/workflows/deploy.yml | 176-187 |
+| 3 | Staging `current` symlink flipped before `npm ci` succeeds | HIGH | ✅ Fixed | scripts/deploy-staging-vm.sh | 109-112 |
+| 4 | SSH uses `StrictHostKeyChecking=accept-new` without pinned host key | MEDIUM | ✅ Fixed | scripts/deploy-staging-vm.sh | 76-81 |
 
-**Merge readiness:** No open Critical/High/Medium blockers. ECS trigger-only production deploy accepted by team; staging atomic activation and SSH host pinning resolved.
+**Merge readiness:** No open Critical/High blockers. PR #230 correctly separates `scp` port (`-P`) from `ssh` port (`-p`); safe to merge.
