@@ -5,7 +5,7 @@
 | Repo | `SkillshowFx/skillshow` |
 | PR | [#234](https://github.com/SkillshowFx/skillshow/pull/234) |
 | Branch | `SKSH-384` → `main` |
-| Head | `f8ef2268f082f7ce6c00ecd20ede518906843a39` |
+| Head | `89c617f979bc1ca25b1b69f08e13543169189eb0` |
 | Scope | Default list page size 10→20; A–Z ordering for sports/roles/permissions/event types; partner multi-contact + host-code dashes; connections panel page sizes |
 | Prompts | `pr-review/prompts/backend-system-prompt.md`, `SECURITY-AUDIT-PRE-RELEASE.md` |
 
@@ -33,15 +33,14 @@
 - Connections panel `DEFAULT_LIMIT` / `PAGE_SIZE_OPTIONS` match admin-ui.
 - Sport / event-type / permission-tree sort helpers are small, tested, and reused.
 - Partner create custom Joi rule preserves legacy contact payloads.
+- Contacts audit snapshot now includes phone with unit coverage.
 
 ## GitHub comments
 
-### `src/services/partner-audit.service.ts`
-- **HIGH** — Partner contacts audit omits phone (line 113)
+_No open findings._
 
 ## Findings
 
-```markdown
 ---
 Protected module changed (`list-query.validation.ts`)
 
@@ -57,38 +56,35 @@ Impact:
 - Shared module churn outside a dedicated list-query ticket is normally blocked.
 
 Recommendation:
-Accepted for SKSH-384: the ticket is explicitly about pagination defaults, and admin-ui mirrors `DEFAULT_TABLE_PAGE_SIZE = 20`. No further action required unless product wants the change reverted to a non-protected constant override per domain.
----
-```
+Accepted for SKSH-384: the ticket is explicitly about pagination defaults, and admin-ui mirrors `DEFAULT_TABLE_PAGE_SIZE = 20`.
 
-```markdown
+**Status:** Accepted
+---
+
 ---
 Partner contacts audit omits phone
 
 Risk Level: HIGH
 File Path: src/services/partner-audit.service.ts
-Lines: 107-120
+Lines: 107-121
 
 Description:
-**Contract** / audit completeness — `normalizeContactsAuditValue` serializes name, email, role, and department, but never `phone`. Primary phone may still surface via synced `contactNumber`, but phone-only edits on non-primary contacts (or any contact when `contactNumber` is unchanged) produce identical audit snapshots and are silently dropped.
+**Contract** / audit completeness — `normalizeContactsAuditValue` initially serialized name, email, role, and department, but never `phone`. Phone-only edits on non-primary contacts produced identical audit snapshots.
 
 Impact:
-- Multi-contact phone updates are invisible in partner audit history.
-- Incomplete audit trail for a field the create/edit UI collects.
+- Multi-contact phone updates were invisible in partner audit history.
 
 Recommendation:
-Include phone in the per-contact parts (after email), e.g. `if (contact.phone?.trim()) parts.push(contact.phone.trim())`, and add a unit test that a phone-only contacts change yields a non-empty audit diff.
----
-```
+Include trimmed phone in the serialized parts and cover a phone-only change in tests.
 
-PR comment (inline, 2–4 sentences):
-`normalizeContactsAuditValue` drops `phone` from the contacts snapshot, so phone-only edits (especially on non-primary contacts) never appear in partner audit logs. Include trimmed phone in the serialized parts and cover a phone-only change in tests.
+**Re-verify:** ✅ Fixed — phone included after email; `partner-audit.service.test.ts` covers serialization and phone-only non-primary contact change.
+---
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 | 1 | Protected module changed (`list-query.validation.ts`) | CRITICAL | Accepted | `src/validation/list-query.validation.ts` | 8-12 |
-| 2 | Partner contacts audit omits phone | HIGH | Open | `src/services/partner-audit.service.ts` | 107-120 |
+| 2 | Partner contacts audit omits phone | HIGH | ✅ Fixed | `src/services/partner-audit.service.ts` | 107-121 |
 
-**Merge readiness:** Request changes — 1 open High (contacts audit phone). Protected `DEFAULT_PAGE_SIZE` change Accepted for this ticket.
+**Merge readiness:** No open Critical/High/Medium blockers on backend.
