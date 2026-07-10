@@ -26,8 +26,8 @@
 
 ## GitHub comments
 
-### `src/pages/partners/onboarding/components/partner-audit-log.tsx`
-- **HIGH** — Partner audit labels missing after contacts section move (line 8)
+### Summary-only (file not in PR diff)
+- **HIGH** — Partner audit labels missing after contacts section move (`partner-audit-log.tsx` 8-11)
 
 ### `src/pages/videos/details/utils/sportOptions.ts`
 - **MEDIUM** — Shared sport sort helpers left under videos feature path (line 12)
