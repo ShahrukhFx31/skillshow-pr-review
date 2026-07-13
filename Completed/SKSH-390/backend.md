@@ -8,6 +8,7 @@
 | Head | `a3f4017fb449c08103639ac2c57be8d7ab2a534b` |
 | Scope | JSDoc on `compareSportOptionLabels` (paired with admin-ui upload/sport-sort fixes) |
 | Prompts | `pr-review/prompts/backend-system-prompt.md`, `SECURITY-AUDIT-PRE-RELEASE.md` |
+| Re-verify | 2026-07-13 — head unchanged (`a3f4017`) |
 
 **Aligned with:** [frontend.md](./frontend.md)
 
