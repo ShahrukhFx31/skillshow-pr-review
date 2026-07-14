@@ -8,6 +8,7 @@
 | Head | `cf842b130609bd6efd738b1b3e4fb5cb12efb63b` |
 | Scope | Admin list total fallback; Edit Request Pagination → PaginationBar |
 | Prompts | `pr-review/prompts/frontend-system-prompt.md` |
+| Re-verify | 2026-07-14 — head unchanged `cf842b13`; findings still Open |
 
 ### Protected modules
 

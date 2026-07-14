@@ -5,9 +5,10 @@
 | Repo | `SkillshowFx/skillshow` |
 | PR | [#238](https://github.com/SkillshowFx/skillshow/pull/238) |
 | Branch | `SKSH-395` → `main` |
-| Head | `3180a12c9dd75bc904f142bf8daf656a18dc346b` |
-| Scope | Admin edit-request `queue=paid_or_recent`, search `$or` nesting, payment/order/goals history |
+| Head | `cf6d3a14b366f8ecbbcdbf7025958e06b584b74c` |
+| Scope | Admin edit-request `queue=paid_or_recent`, search `$or` nesting, payment/order/goals history; `source_changes_requested` status |
 | Prompts | `pr-review/prompts/backend-system-prompt.md`, `SECURITY-AUDIT-PRE-RELEASE.md` |
+| Re-verify | 2026-07-14 — head `cf6d3a14` (adds `source_changes_requested` to constants/types) |
 
 **Aligned with:** [frontend.md](./frontend.md)
 
@@ -22,7 +23,7 @@
 | Check | Verdict |
 |-------|---------|
 | Route `authorize` / RBAC | ✅ unchanged (admin edit-request routes) |
-| List contract / validation | ✅ `queue` oxor’d with `paymentStatus` |
+| List contract / validation | ✅ `queue` oxor’d with `paymentStatus`; status allow-list includes `source_changes_requested` |
 
 ### Positive notes
 
@@ -30,6 +31,7 @@
 - `applyAdminSearchFilter` nests existing `$or` under `$and` so search no longer drops the queue filter.
 - Admin update history for payment / due date / order ID / goals only records when values change.
 - `orderId` on admin list items is a coherent API improvement.
+- New `source_changes_requested` status aligns admin list filter with stored source-file workflow (pairs with frontend #337).
 
 ## GitHub comments
 

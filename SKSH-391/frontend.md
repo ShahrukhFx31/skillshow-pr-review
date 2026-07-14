@@ -8,6 +8,7 @@
 | Head | `fae28dd2c40fd4c8b7bf7413997cd0d91169d31d` |
 | Scope | Desktop Visibility column on My Videos dashboard |
 | Prompts | `pr-review/prompts/frontend-system-prompt.md` |
+| Re-verify | 2026-07-14 — head unchanged `fae28dd2`; Medium finding still Open |
 
 ### Protected modules
 
