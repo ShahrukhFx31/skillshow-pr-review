@@ -5,10 +5,10 @@
 | Repo | `SkillshowFx/skillshow-admin-ui` |
 | PR | [#340](https://github.com/SkillshowFx/skillshow-admin-ui/pull/340) |
 | Branch | `SKSH-406` → `main` |
-| Head | `cf842b130609bd6efd738b1b3e4fb5cb12efb63b` |
+| Head | `669eda0387e4cf520c51da508a41aba6506bb726` |
 | Scope | Admin list total fallback; Edit Request Pagination → PaginationBar |
 | Prompts | `pr-review/prompts/frontend-system-prompt.md` |
-| Re-verify | 2026-07-14 — head unchanged `cf842b13`; findings still Open |
+| Re-verify | 2026-07-15 — head `669eda03` unchanged; sibling totals still invent length |
 
 ### Protected modules
 
@@ -20,17 +20,14 @@
 ### Positive notes
 
 - Migrating Edit Request list chrome to `PaginationBar` matches app-wide rows-per-page UI.
-- Showing the bar when `total > 0` (not only `total > limit`) aligns with `PaginationBar` behavior.
+- `EditRequestListPaginationBar` removes duplicated Table/Cards adapters.
+- Main admin list total now uses `?? 0` (no longer invents page length).
 
 ## GitHub comments
 
 ### `src/pages/adminEditRequest/index.tsx`
 
-- **L222** — Fabricated list total from current page length (HIGH)
-
-### `src/pages/editRequest/components/EditRequestTable.tsx`
-
-- **L208** — Duplicated PaginationBar adapters in Edit Request list UI (MEDIUM)
+- **L227** — Assignment-returns / feedback totals still fall back to page row length (HIGH)
 
 ## Findings
 
@@ -39,17 +36,23 @@ Fabricated list total from current page length
 
 Risk Level: HIGH
 File Path: src/pages/adminEditRequest/index.tsx
-Lines: 222
+Lines: 227-229
 
 Description:
-**Contract** — Totals change from `data?.pagination.total ?? 0` to `data?.pagination?.total ?? rows.length`. Falling back to **current page `rows.length`** invents a total when the list envelope omits `pagination`.
+**Contract** — Main `listTotal` was updated to `data?.pagination?.total ?? 0`, but assignment-returns and feedback tabs still use `?? assignmentReturnsRows.length` / `?? feedbackRows.length`, inventing a total when `pagination` is missing.
+
+**Re-verify (669eda03, latest):** Partially fixed — main list OK; `assignmentReturnsTotal` and `feedbackTotal` still synthesize from current page length.
 
 Impact:
-- `PaginationBar` may show a wrong total (e.g. 10 when the real total is larger), under-paging or hiding further pages.
-- Export / tab totals derived from the same values can report a misleading count.
+- Assignment Returns / Feedback `PaginationBar` (and export counts) can understate the real total and hide further pages.
 
 Recommendation:
-Keep optional chaining, but use `?? 0` — do not substitute row length for server total. If `pagination` is missing, fix the API contract.
+Use `?? 0` for both sibling totals, same as `listTotal`:
+
+```ts
+const assignmentReturnsTotal = assignmentReturnsData?.pagination?.total ?? 0;
+const feedbackTotal = feedbacksData?.pagination?.total ?? 0;
+```
 ---
 
 ---
@@ -60,20 +63,16 @@ File Path: src/pages/editRequest/components/EditRequestTable.tsx
 Lines: 208
 
 Description:
-**DRY** / **Contract** — `EditRequestTable` and `EditRequestCards` each copy the same `PaginationBar` wiring (`setPage` → `onPageChange(next, limit)`, `setPageSize` → `onPageChange(1, next)`).
+**DRY** — Table and Cards each copied PaginationBar wiring.
 
-Impact:
-- Future pagination behavior changes must be edited twice and can drift.
-
-Recommendation:
-Lift a single adapter (parent builds `bar`, or a small shared footer) and reuse in both Cards and Table.
+**Re-verify (669eda03):** ✅ Fixed — shared `EditRequestListPaginationBar` used by both.
 ---
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Fabricated list total from current page length | HIGH | Open | `src/pages/adminEditRequest/index.tsx` | 222 |
-| 2 | Duplicated PaginationBar adapters in Edit Request list UI | MEDIUM | Open | `src/pages/editRequest/components/EditRequestTable.tsx` | 208 |
+| 1 | Fabricated list total from current page length | HIGH | Partially fixed | `src/pages/adminEditRequest/index.tsx` | 227-229 |
+| 2 | Duplicated PaginationBar adapters in Edit Request list UI | MEDIUM | ✅ Fixed | `src/pages/editRequest/components/EditRequestTable.tsx` | 208 |
 
-**Merge readiness:** Not ready — 1 open High finding.
+**Merge readiness:** Not ready — 1 open High (sibling tab totals still invent page length).
