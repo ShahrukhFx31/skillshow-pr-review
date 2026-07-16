@@ -8,6 +8,7 @@
 | Head | `af8ed5392ee740583f6e68d8ab909879daf289c8` |
 | Scope | Edit-request goal options; Enhance Video goal selection; Upload Videos layout |
 | Prompts | `pr-review/prompts/frontend-system-prompt.md` |
+| Re-verify | 2026-07-16 — head unchanged; still no Critical/High/Medium findings |
 
 ### Protected modules
 

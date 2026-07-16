@@ -8,6 +8,7 @@
 | Head | `21df20b77ba62384d36bcd06c9bea30f359f7655` |
 | Scope | Edit-request goal/output constants; username collision retry hardening |
 | Prompts | `pr-review/prompts/backend-system-prompt.md`, `pr-review/SECURITY-AUDIT-PRE-RELEASE.md` |
+| Re-verify | 2026-07-16 — head unchanged; still no Critical/High findings |
 
 ### Protected modules
 

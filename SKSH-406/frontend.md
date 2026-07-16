@@ -8,7 +8,7 @@
 | Head | `669eda0387e4cf520c51da508a41aba6506bb726` |
 | Scope | Admin list total fallback; Edit Request Pagination → PaginationBar |
 | Prompts | `pr-review/prompts/frontend-system-prompt.md` |
-| Re-verify | 2026-07-15 — head `669eda03` unchanged; sibling totals still invent length |
+| Re-verify | 2026-07-16 — head `669eda03` unchanged; sibling totals still invent length |
 
 ### Protected modules
 
@@ -41,7 +41,7 @@ Lines: 227-229
 Description:
 **Contract** — Main `listTotal` was updated to `data?.pagination?.total ?? 0`, but assignment-returns and feedback tabs still use `?? assignmentReturnsRows.length` / `?? feedbackRows.length`, inventing a total when `pagination` is missing.
 
-**Re-verify (669eda03, latest):** Partially fixed — main list OK; `assignmentReturnsTotal` and `feedbackTotal` still synthesize from current page length.
+**Re-verify (669eda03, 2026-07-16):** Partially fixed — main list OK; lines 227–229 still synthesize from current page length. Head unchanged since prior review.
 
 Impact:
 - Assignment Returns / Feedback `PaginationBar` (and export counts) can understate the real total and hide further pages.
