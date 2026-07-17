@@ -8,6 +8,7 @@
 | Head | `d83eee1dcb16016ad8f0398c897593b33c44965f` |
 | Scope | Crew list fields (otherRoles / availability); invite `accountLabel`; export columns |
 | Prompts | `pr-review/prompts/backend-system-prompt.md`, `pr-review/SECURITY-AUDIT-PRE-RELEASE.md` |
+| Verified | 2026-07-17 — head unchanged; still ready |
 
 ### Protected modules
 
