@@ -5,10 +5,10 @@
 | Repo | `SkillshowFx/skillshow-admin-ui` |
 | PR | [#340](https://github.com/SkillshowFx/skillshow-admin-ui/pull/340) |
 | Branch | `SKSH-406` → `main` |
-| Head | `669eda0387e4cf520c51da508a41aba6506bb726` |
+| Head | `fda17dbe25dfa24204923173939f73481f66d33e` |
 | Scope | Admin list total fallback; Edit Request Pagination → PaginationBar |
 | Prompts | `pr-review/prompts/frontend-system-prompt.md` |
-| Re-verify | 2026-07-16 — head `669eda03` unchanged; sibling totals still invent length |
+| Verified | 2026-07-17 vs prior head `669eda03` |
 
 ### Protected modules
 
@@ -21,13 +21,11 @@
 
 - Migrating Edit Request list chrome to `PaginationBar` matches app-wide rows-per-page UI.
 - `EditRequestListPaginationBar` removes duplicated Table/Cards adapters.
-- Main admin list total now uses `?? 0` (no longer invents page length).
+- All admin list totals (`listTotal`, `assignmentReturnsTotal`, `feedbackTotal`) use `?? 0`.
 
 ## GitHub comments
 
-### `src/pages/adminEditRequest/index.tsx`
-
-- **L227** — Assignment-returns / feedback totals still fall back to page row length (HIGH)
+No open findings to post (prior High resolved on head).
 
 ## Findings
 
@@ -39,20 +37,15 @@ File Path: src/pages/adminEditRequest/index.tsx
 Lines: 227-229
 
 Description:
-**Contract** — Main `listTotal` was updated to `data?.pagination?.total ?? 0`, but assignment-returns and feedback tabs still use `?? assignmentReturnsRows.length` / `?? feedbackRows.length`, inventing a total when `pagination` is missing.
-
-**Re-verify (669eda03, 2026-07-16):** Partially fixed — main list OK; lines 227–229 still synthesize from current page length. Head unchanged since prior review.
+**Contract** — Assignment-returns and feedback tabs used `?? rows.length`, inventing a total when `pagination` was missing.
 
 Impact:
-- Assignment Returns / Feedback `PaginationBar` (and export counts) can understate the real total and hide further pages.
+- PaginationBar / export counts could understate the real total
 
 Recommendation:
-Use `?? 0` for both sibling totals, same as `listTotal`:
+Use `?? 0` for both sibling totals, same as `listTotal`.
 
-```ts
-const assignmentReturnsTotal = assignmentReturnsData?.pagination?.total ?? 0;
-const feedbackTotal = feedbacksData?.pagination?.total ?? 0;
-```
+Status: ✅ Fixed — `assignmentReturnsTotal` and `feedbackTotal` now use `?? 0` (L258–260 on head).
 ---
 
 ---
@@ -65,14 +58,14 @@ Lines: 208
 Description:
 **DRY** — Table and Cards each copied PaginationBar wiring.
 
-**Re-verify (669eda03):** ✅ Fixed — shared `EditRequestListPaginationBar` used by both.
+Status: ✅ Fixed — shared `EditRequestListPaginationBar` used by both.
 ---
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Fabricated list total from current page length | HIGH | Partially fixed | `src/pages/adminEditRequest/index.tsx` | 227-229 |
+| 1 | Fabricated list total from current page length | HIGH | ✅ Fixed | `src/pages/adminEditRequest/index.tsx` | 227-229 |
 | 2 | Duplicated PaginationBar adapters in Edit Request list UI | MEDIUM | ✅ Fixed | `src/pages/editRequest/components/EditRequestTable.tsx` | 208 |
 
-**Merge readiness:** Not ready — 1 open High (sibling tab totals still invent page length).
+**Merge readiness:** Ready — prior High fully fixed on `fda17dbe`; no new Critical/High/Medium open.
