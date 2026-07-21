@@ -37,4 +37,4 @@ Recommendation:
 |---|--------|------|--------|------|-------|
 | 1 | Complimentary edit requests created with default unpaid payment status | HIGH | ✅ Fixed | src/services/edit-request.service.ts | 201-210 |
 
-**Merge readiness:** No open Critical/High blockers on backend. Pair with admin-ui #350 (frontend Medium copy cleanup optional).
+**Merge readiness:** No open Critical/High blockers on backend. (Frontend Medium copy also ✅ Fixed on #350.)
