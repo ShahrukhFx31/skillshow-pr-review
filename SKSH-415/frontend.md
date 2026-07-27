@@ -6,9 +6,13 @@
 **Scope:** Optional roster on team create; rename Athletes → Roster in UI; logo Form.Item validation  
 **Prompt:** `pr-review/prompts/frontend-system-prompt.md`  
 **Paired backend:** `pr-review/SKSH-415/backend.md` (skillshow #250)  
-**Updated:** 2026-07-27 — finding #1 Accepted (developer: intentional `value: "athletes"`)
+**Updated:** 2026-07-27 — re-review; split intentional value vs broken `activeTab` wiring
 
 ## GitHub comments
+
+### `src/pages/teams/details/index.tsx`
+
+- **L49** — `activeTab` checks use `"roster"` but Segmented value is `"athletes"`
 
 ### `src/pages/teams/constant/teamEmptyStateCopy.ts`
 
@@ -17,24 +21,34 @@
 ## Findings
 
 ---
-Tab value still "athletes" but comparisons use "roster"
+activeTab checks use "roster" but Segmented value is "athletes"
 
 Risk Level: CRITICAL
 File Path: src/pages/teams/details/index.tsx
 Lines: 49-53, 213, 250
 
 Description:
-**Contract.** `TEAM_DETAILS_TAB_OPTIONS` uses `value: "athletes"` while the details page compares `activeTab` to `"roster"`. Selecting the Roster tab sets `activeTab` to `"athletes"`, so roster chrome (`activeTab === "roster"`) never matches.
+**Contract.** `TEAM_DETAILS_TAB_OPTIONS` is `{ label: "Roster", value: "athletes" }` (author confirmed keeping `value: "athletes"` intentional). This PR still changes details comparisons from `"athletes"` → `"roster"`:
 
-**Developer reply** ([discussion](https://github.com/SkillshowFx/skillshow-admin-ui/pull/357#discussion_r3655096048)): “I add it intentionaly” on keeping `value: "athletes"` in `teamUi.constants.ts`.
+- `activeTab !== "roster"` (closes modal/filter)
+- `activeTab === "roster"` (Add button + search/filter chrome)
 
-**Accepted:** Label “Roster” + internal value `"athletes"` is intentional per author. If details still checks `"roster"`, that remains a separate wiring bug to align to `"athletes"` — treated as Accepted for this review thread per author intent on the constant.
+Selecting the Roster tab sets `activeTab` to `"athletes"`, so those branches never run. The roster table still shows via the overview `else`, but without controls.
+
+Author intent covers the **option value**, not the broken comparisons. Fix is to revert details checks to `"athletes"`.
 
 Impact:
-- (Acknowledged) Internal tab key stays `"athletes"` by design.
+- Add-athlete CTA and roster search/filter never appear on the Roster tab.
+- Add-athlete modal cannot stay open on that tab.
 
 Recommendation:
-_(Accepted — intentional.)_ Ensure every `activeTab` check uses `"athletes"` to match the intentional option value.
+```ts
+if (activeTab !== "athletes") { ... }
+// and
+activeTab === "athletes" ? ( /* Add button / athletesTabBarExtra */ ) : null
+```
+
+Keep `TEAM_DETAILS_TAB_OPTIONS` as `{ label: "Roster", value: "athletes" }`.
 ---
 
 ---
@@ -45,20 +59,23 @@ File Path: src/pages/teams/constant/teamEmptyStateCopy.ts
 Lines: 29
 
 Description:
-Empty title became `"No rosters on this team yet"` and create search placeholder `"Search rosters by name..."`. Users search/add athletes (roster members), not “rosters.” Column “Roster Name” is similarly unclear vs “Athlete Name” / “Name.”
+Empty title became `"No rosters on this team yet"` / `"No roster match your search"`; create placeholder `"Search rosters by name..."`; column `"Roster Name"`. Users manage athletes on a roster, not multiple “rosters.”
 
 Impact:
-- Confusing empty/search copy on create and details.
+- Confusing empty/search/column copy.
 
 Recommendation:
-Use athlete/roster-member language, e.g. `"No athletes on this team yet"`, `"Search roster by name..."`, column title `"Name"` or `"Athlete"`. Keep the tab label “Roster” if desired.
+e.g. `"No athletes on this team yet"`, `"Search roster by name..."`, column `"Name"` or `"Athlete"`. Tab label “Roster” can stay.
 ---
+
+**Positive notes:** Optional roster on create + logo `Form.Item` validation align with backend #250. Create submit no longer requires ≥1 athlete.
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Tab value still "athletes" but comparisons use "roster" | CRITICAL | Accepted | src/pages/teams/details/index.tsx | 49-53, 213, 250 |
+| 1 | activeTab checks use "roster" but Segmented value is "athletes" | CRITICAL | Open | src/pages/teams/details/index.tsx | 49-53, 213, 250 |
 | 2 | Awkward “No rosters” / “Search rosters” copy | MEDIUM | Open | src/pages/teams/constant/teamEmptyStateCopy.ts | 29 |
+| 3 | Keep label Roster + value "athletes" | — | Accepted | src/pages/teams/constant/teamUi.constants.ts | 12 |
 
-**Merge readiness:** No open Critical/High blockers. Open Medium #2 (copy) only.
+**Merge readiness:** Request changes — open Critical finding #1.
