@@ -22,4 +22,4 @@ _No Critical or High findings._
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 
-**Merge readiness:** No open Critical/High blockers. Ship with frontend #357 after its tab-value fix.
+**Merge readiness:** No open Critical/High blockers. Frontend #357 tab-value finding Accepted (intentional `value: "athletes"`); Medium copy finding still Open.
