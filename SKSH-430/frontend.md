@@ -2,7 +2,7 @@
 
 **Repo:** SkillshowFx/skillshow-admin-ui  
 **Branch:** SKSH-430 → main  
-**Head:** `5daab54377c667b553137286cd1ecc93a1527d98` (updated — dashboard Create Team removed)  
+**Head:** `fe5593d4b3fe43728082f41299cc070520e0cc41`  
 **Scope:** Admin teams via `/v1/admin/*` on shared Teams pages; coach filter; create-with-coach  
 **Prompt:** `pr-review/prompts/frontend-system-prompt.md`  
 **Paired backend:** `pr-review/SKSH-430/backend.md` (skillshow #251)  

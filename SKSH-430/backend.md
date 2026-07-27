@@ -2,7 +2,7 @@
 
 **Repo:** SkillshowFx/skillshow  
 **Branch:** SKSH-430 → main  
-**Head:** `ffbff0769c3fe0b83c94bdd7ab2aa351e1bd0bda`  
+**Head:** `fcd6fdc5af52825fca097e4686416538da0e4c6a`  
 **Scope:** Admin teams CRUD/list under `/v1/admin/teams*`, reuse coach-link service, coach reassignment + notify  
 **Prompt:** `pr-review/prompts/backend-system-prompt.md`  
 **Paired frontend:** `pr-review/SKSH-430/frontend.md` (admin-ui #360)  

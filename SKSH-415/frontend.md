@@ -2,7 +2,7 @@
 
 **Repo:** SkillshowFx/skillshow-admin-ui  
 **Branch:** SKSH-415 → main  
-**Head:** `fd6664dea91f5cd4aea46c59919d47d7e8aa2e96`  
+**Head:** `6a2201bd00d737d0143d527536e2a15cfbfff167`  
 **Scope:** Optional roster on team create; rename Athletes → Roster in UI; logo Form.Item validation  
 **Prompt:** `pr-review/prompts/frontend-system-prompt.md`  
 **Paired backend:** `pr-review/SKSH-415/backend.md` (skillshow #250)
