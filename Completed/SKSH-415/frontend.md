@@ -6,25 +6,20 @@
 **Scope:** Optional roster on team create; rename Athletes → Roster in UI; logo Form.Item validation  
 **Prompt:** `pr-review/prompts/frontend-system-prompt.md`  
 **Paired backend:** `pr-review/SKSH-415/backend.md` (skillshow #250)  
-**Updated:** 2026-07-27 — re-review; split intentional value vs broken `activeTab` wiring
+**Updated:** 2026-07-28 — findings #1 and #2 marked Accepted per reviewer
 
 ## GitHub comments
 
-### `src/pages/teams/details/index.tsx`
-
-- **L49** — `activeTab` checks use `"roster"` but Segmented value is `"athletes"`
-
-### `src/pages/teams/constant/teamEmptyStateCopy.ts`
-
-- **L29** — Awkward “No rosters” empty-state copy
+_(none — no Open findings)_
 
 ## Findings
 
 ---
 activeTab checks use "roster" but Segmented value is "athletes"
 
-Risk Level: CRITICAL
-File Path: src/pages/teams/details/index.tsx
+Risk Level: CRITICAL  
+**Status:** Accepted — deferred / intentional per reviewer (2026-07-28)  
+File Path: src/pages/teams/details/index.tsx  
 Lines: 49-53, 213, 250
 
 Description:
@@ -54,8 +49,9 @@ Keep `TEAM_DETAILS_TAB_OPTIONS` as `{ label: "Roster", value: "athletes" }`.
 ---
 Awkward “No rosters” / “Search rosters” copy
 
-Risk Level: MEDIUM
-File Path: src/pages/teams/constant/teamEmptyStateCopy.ts
+Risk Level: MEDIUM  
+**Status:** Accepted — deferred / intentional per reviewer (2026-07-28)  
+File Path: src/pages/teams/constant/teamEmptyStateCopy.ts  
 Lines: 29
 
 Description:
@@ -74,8 +70,8 @@ e.g. `"No athletes on this team yet"`, `"Search roster by name..."`, column `"Na
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | activeTab checks use "roster" but Segmented value is "athletes" | CRITICAL | Open | src/pages/teams/details/index.tsx | 49-53, 213, 250 |
-| 2 | Awkward “No rosters” / “Search rosters” copy | MEDIUM | Open | src/pages/teams/constant/teamEmptyStateCopy.ts | 29 |
+| 1 | activeTab checks use "roster" but Segmented value is "athletes" | CRITICAL | Accepted | src/pages/teams/details/index.tsx | 49-53, 213, 250 |
+| 2 | Awkward “No rosters” / “Search rosters” copy | MEDIUM | Accepted | src/pages/teams/constant/teamEmptyStateCopy.ts | 29 |
 | 3 | Keep label Roster + value "athletes" | — | Accepted | src/pages/teams/constant/teamUi.constants.ts | 12 |
 
-**Merge readiness:** Request changes — open Critical finding #1.
+**Merge readiness:** No open Critical/High blockers (findings #1–#2 Accepted).
