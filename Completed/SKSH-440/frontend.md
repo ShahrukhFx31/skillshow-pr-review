@@ -3,18 +3,15 @@
 **Repo:** SkillshowFx/skillshow-admin-ui  
 **PR:** https://github.com/SkillshowFx/skillshow-admin-ui/pull/366  
 **Branch:** `SKSH-440` → main  
-**Head:** `d28dec4380cb3a6cfc62ed9fe895de25f7993a49`  
+**Head:** `cf5b1490fd2346f74c17f7a7344a11724c5aa508`  
 **Scope:** Partner `referralLink` field (form + connect flow), `ShareUrlCopyField` reuse, partners table inline status toggle  
 **Prompt:** `pr-review/prompts/frontend-system-prompt.md`  
-**Paired backend:** `pr-review/SKSH-440/backend.md` (skillshow #255)  
-**Updated:** 2026-07-30 — re-review on latest head (#1, #3 fixed; #2 still open)
+**Paired backend:** `pr-review/Completed/SKSH-440/backend.md` (skillshow #255)  
+**Updated:** 2026-07-30 — re-review on latest head (all findings resolved)
 
 ## GitHub comments
 
-### `src/pages/partners/onboarding/components/partner-form.tsx`
-
-- **L143–145** (finding) — Create mutation omits `partnersDirectoryQueryKey` invalidation
-- **L156** (inline anchor) — Posted on patch `onSuccess` directory invalidation; create block is unchanged in diff so GitHub cannot anchor on L143–145 directly
+_(none — no Open Critical/High/Medium)_
 
 ## Findings
 
@@ -40,16 +37,16 @@ Create mutation omits partnersDirectoryQueryKey invalidation
 
 Risk Level: MEDIUM
 File Path: src/pages/partners/onboarding/components/partner-form.tsx
-Lines: 141-146
+Lines: 143-146
 
 Description:
-**Global consistency.** `patchPartnerMutation.onSuccess` invalidates `partnersDirectoryQueryKey`, but `createPartnerMutation.onSuccess` still only invalidates `["partners", "list"]`. New partners (with referral links used by Connect) won't appear in directory-backed UIs until cache expiry or manual refresh.
+**Global consistency.** `patchPartnerMutation.onSuccess` invalidates `partnersDirectoryQueryKey`, but `createPartnerMutation.onSuccess` previously only invalidated `["partners", "list"]`.
 
 Impact:
-- After creating an active partner with a referral link, Connect modal / directory lists may omit the new partner.
+- Resolved — latest head adds `void queryClient.invalidateQueries({ queryKey: partnersDirectoryQueryKey });` to `createPartnerMutation.onSuccess` (line 145).
 
 Recommendation:
-Add `void queryClient.invalidateQueries({ queryKey: partnersDirectoryQueryKey });` to `createPartnerMutation.onSuccess`, matching patch success handling.
+N/A — fixed on latest head.
 ---
 
 ---
@@ -69,14 +66,14 @@ Recommendation:
 N/A — fixed on latest head.
 ---
 
-**Positive notes:** `referralLink` flows through `PartnerFields` / list rows; audit labels auto-pick up via `buildAuditFieldLabelMap(FORM_SECTIONS)`; `ShareUrlCopyField` extension is backward-compatible; `showPartnerConnectInfo` opens validated API URLs with `noopener,noreferrer`; responsive table correctly reuses `partnerColumns` for the status switch.
+**Positive notes:** `referralLink` flows through `PartnerFields` / list rows; audit labels auto-pick up via `buildAuditFieldLabelMap(FORM_SECTIONS)`; `ShareUrlCopyField` extension is backward-compatible; `showPartnerConnectInfo` opens validated API URLs with `noopener,noreferrer`; responsive table correctly reuses `partnerColumns` for the status switch; create/patch/status mutations all invalidate `partnersDirectoryQueryKey`.
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
 | 1 | Status toggle mutation lacks error handling and directory cache invalidation | MEDIUM | ✅ Fixed | src/pages/partners/dashboard/components/partners-table.tsx | 41-57 |
-| 2 | Create mutation omits partnersDirectoryQueryKey invalidation | MEDIUM | Open | src/pages/partners/onboarding/components/partner-form.tsx | 141-146 |
+| 2 | Create mutation omits partnersDirectoryQueryKey invalidation | MEDIUM | ✅ Fixed | src/pages/partners/onboarding/components/partner-form.tsx | 143-146 |
 | 3 | Referral link client validation weaker than backend http/https rule | MEDIUM | ✅ Fixed | src/pages/partners/onboarding/constants.ts | 93-98 |
 
-**Merge readiness:** No open Critical/High blockers. One Medium follow-up (#2) recommended before or shortly after merge.
+**Merge readiness:** No open Critical/High/Medium blockers — approve for merge.
