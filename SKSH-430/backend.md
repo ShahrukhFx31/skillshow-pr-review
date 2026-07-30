@@ -2,11 +2,11 @@
 
 **Repo:** SkillshowFx/skillshow  
 **Branch:** SKSH-430 → main  
-**Head:** `fcd6fdc5af52825fca097e4686416538da0e4c6a`  
+**Head:** `0dc2337464f7c55982645cbc0b79f9b7cf946c48`  
 **Scope:** Admin teams CRUD/list under `/v1/admin/teams*`, reuse coach-link service, coach reassignment + notify  
 **Prompt:** `pr-review/prompts/backend-system-prompt.md`  
 **Paired frontend:** `pr-review/SKSH-430/frontend.md` (admin-ui #360)  
-**Updated:** 2026-07-24 — merged additional HIGH findings from follow-up pass ([backend review](6888e593-192d-4492-95dd-9faf2a8690ec))
+**Updated:** 2026-07-30 — re-review on latest head (prior findings still open)
 
 ## GitHub comments
 
@@ -16,12 +16,12 @@
 
 ### `src/routes/admin-teams.routes.ts`
 
-- **L32** — Team/coach athlete list routes lack query validation
+- **L40** — Team/coach athlete list routes lack query validation
 
 ### `src/repositories/coach-link.repository.ts`
 
-- **L374** — Admin list filter/count/find duplicate coach-scoped methods
-- **L406** — `countAllTeamsList` bypasses soft-delete filter
+- **L384** — Admin list filter/count/find duplicate coach-scoped methods
+- **L416** — `countAllTeamsList` bypasses soft-delete filter
 
 ## Findings
 
@@ -30,7 +30,7 @@ List handlers read req.query instead of validatedQuery
 
 Risk Level: HIGH
 File Path: src/controllers/admin-teams.controller.ts
-Lines: 17-19, 149-151, 229-231
+Lines: 17-19, 198-200, 278-280
 
 Description:
 **Contract.** `GET /teams` wires `validate(adminTeamsListQuerySchema, "query")`, which sets `req.validatedQuery` with coerced `page` / `pageSize` (and strips unknowns). Controllers still call `parseAdminTeamListQuery` / `parseCoachAthleteListQuery` on raw `req.query`. Middleware docs require typed list params from `validatedQuery` only. Same pattern on `listTeamAthletes` and `listCoachLinkedAthletes`.
@@ -48,7 +48,7 @@ Team/coach athlete list routes lack query validation
 
 Risk Level: HIGH
 File Path: src/routes/admin-teams.routes.ts
-Lines: 32-37, 76-80
+Lines: 40-44, 91-95
 
 Description:
 **Contract.** `GET /teams/:teamId/athletes` and `GET /coaches/:coachUserId/athletes` validate params only — no Joi query schema — then parse `page` / `pageSize` / sort from raw query.
@@ -66,7 +66,7 @@ Admin list filter/count/find duplicate coach-scoped methods
 
 Risk Level: HIGH
 File Path: src/repositories/coach-link.repository.ts
-Lines: 374-425, 436-444
+Lines: 384-436, 446-454
 
 Description:
 **DRY.** New `adminTeamListFilter` / `countAllTeamsList` / `findAllTeamsListLean` nearly copy `coachTeamListFilter` / `countTeamsByCoachList` / `findTeamsByCoachListLean` (same regex search, sport, season/year parsing, skip/limit/sort). Only difference: optional vs required `coachUserId`. Also adds unused `findTeamListRowByIdLean` (no production callers).
@@ -84,7 +84,7 @@ countAllTeamsList bypasses soft-delete filter
 
 Risk Level: HIGH
 File Path: src/repositories/coach-link.repository.ts
-Lines: 400-406
+Lines: 410-416
 
 Description:
 **Contract.** `TeamSchema.pre(/^find/)` adds `isDeleted: false` for `find*`, but not for `countDocuments`. `findAllTeamsListLean` excludes soft-deleted rows; `countAllTeamsList` does not, so `total` can exceed returnable rows. Pre-existing `countTeamsByCoachList` has the same gap; this PR copies it into the new admin path.
@@ -96,15 +96,15 @@ Recommendation:
 Put `isDeleted: false` in the shared list filter used by both `find` and `countDocuments` (fix coach + admin counts together).
 ---
 
-**Positive notes:** `authorize({ roles: ["admin"] })` expands to `super_admin`. Admin mutations resolve the team’s coach and reuse coach-link eligibility. Coach role checked on create/reassign; roster trimmed on reassignment; search uses `escapeRegexSource`.
+**Positive notes:** `authorize({ roles: ["admin"] })` expands to `super_admin`. Admin mutations resolve the team’s coach and reuse coach-link eligibility. Coach role checked on create/reassign; roster trimmed on reassignment; search uses `escapeRegexSource`. `createdBy` tracking, team-assigned notifications, and optional athlete assignment on create are well covered by new tests.
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | List handlers read req.query instead of validatedQuery | HIGH | Open | src/controllers/admin-teams.controller.ts | 17-19, 149-151, 229-231 |
-| 2 | Team/coach athlete list routes lack query validation | HIGH | Open | src/routes/admin-teams.routes.ts | 32-37, 76-80 |
-| 3 | Admin list filter/count/find duplicate coach-scoped methods | HIGH | Open | src/repositories/coach-link.repository.ts | 374-425, 436-444 |
-| 4 | countAllTeamsList bypasses soft-delete filter | HIGH | Open | src/repositories/coach-link.repository.ts | 400-406 |
+| 1 | List handlers read req.query instead of validatedQuery | HIGH | Open | src/controllers/admin-teams.controller.ts | 17-19, 198-200, 278-280 |
+| 2 | Team/coach athlete list routes lack query validation | HIGH | Open | src/routes/admin-teams.routes.ts | 40-44, 91-95 |
+| 3 | Admin list filter/count/find duplicate coach-scoped methods | HIGH | Open | src/repositories/coach-link.repository.ts | 384-436, 446-454 |
+| 4 | countAllTeamsList bypasses soft-delete filter | HIGH | Open | src/repositories/coach-link.repository.ts | 410-416 |
 
 **Merge readiness:** Request changes — open High findings #1–#4.

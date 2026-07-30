@@ -5,7 +5,8 @@
 **Branch:** `SKSH-443` → main  
 **Head:** `41b27c5bc70d6978387ab015c18e4ca3d097db5f`  
 **Scope:** Share page shell branding (SSLogo header bar) + real SkillShow social footer URLs  
-**Prompt:** `pr-review/prompts/frontend-system-prompt.md`
+**Prompt:** `pr-review/prompts/frontend-system-prompt.md`  
+**Paired backend:** `pr-review/Completed/SKSH-443/backend.md` (skillshow #254)
 
 ## GitHub comments
 
