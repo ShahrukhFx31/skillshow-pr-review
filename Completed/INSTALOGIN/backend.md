@@ -6,8 +6,8 @@
 **Head:** `70cf586b87e2d892823630f2b1e498035a13b6ad`  
 **Scope:** Migrate Instagram OAuth from Facebook Login to Business Login for Instagram (Instagram Login); long-lived token exchange, refresh, profile enrichment, legacy reconnect signaling  
 **Prompt:** `pr-review/prompts/backend-system-prompt.md`  
-**Paired:** `pr-review/INSTALOGIN/frontend.md` (#372), `pr-review/INSTALOGIN/orchestrator.md` (#30)  
-**Updated:** 2026-08-07 — re-verify on latest head (findings #1–#2 fixed)
+**Paired:** `pr-review/Completed/INSTALOGIN/frontend.md` (#372), `pr-review/Completed/INSTALOGIN/orchestrator.md` (#30)  
+**Updated:** 2026-08-07 — archived (merge-ready)
 
 ## GitHub comments
 
@@ -58,4 +58,4 @@ N/A — fixed on head `70cf586b`.
 | 1 | Debug log emits OAuth client secret | HIGH | ✅ Fixed | src/utils/vendor/handlers/index.ts | 103 |
 | 2 | Silent fallback to short-lived token when long-lived exchange fails | HIGH | ✅ Fixed | src/utils/vendor/handlers/social/instagram.handler.ts | 161-188 |
 
-**Merge readiness:** **Merge-ready** — ship with frontend #372 once orchestrator #30 clears `.env.dev` blocker.
+**Merge readiness:** **Merge-ready** — review archived.

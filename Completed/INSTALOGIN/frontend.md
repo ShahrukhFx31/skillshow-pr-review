@@ -6,8 +6,8 @@
 **Head:** `9a5961fb29cabbf35083487707667ce61ffe3da3`  
 **Scope:** Instagram Login prereq modal, reconnect UX, platform connection eligibility for upload/distribute  
 **Prompt:** `pr-review/prompts/frontend-system-prompt.md`  
-**Paired:** `pr-review/INSTALOGIN/backend.md` (#260), `pr-review/INSTALOGIN/orchestrator.md` (#30)  
-**Updated:** 2026-08-07 — re-verify on latest head (findings #1–#3 fixed)
+**Paired:** `pr-review/Completed/INSTALOGIN/backend.md` (#260), `pr-review/Completed/INSTALOGIN/orchestrator.md` (#30)  
+**Updated:** 2026-08-07 — archived (merge-ready)
 
 ## GitHub comments
 
@@ -76,4 +76,4 @@ N/A — fixed on head `9a5961fb`.
 | 2 | OAuth start API errors not caught in ConnectSocialModal | MEDIUM | ✅ Fixed | src/pages/dashboard/components/ConnectSocialModal.tsx | 223-224 |
 | 3 | OAuth start API errors not caught in share-account-tab | MEDIUM | ✅ Fixed | src/pages/user/account/share-account-tab.tsx | 134-135 |
 
-**Merge readiness:** **Merge-ready** — ship with backend #260 once orchestrator #30 clears `.env.dev` blocker.
+**Merge readiness:** **Merge-ready** — review archived.
