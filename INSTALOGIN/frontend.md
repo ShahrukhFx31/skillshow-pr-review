@@ -3,20 +3,15 @@
 **Repo:** SkillshowFx/skillshow-admin-ui  
 **PR:** https://github.com/SkillshowFx/skillshow-admin-ui/pull/372  
 **Branch:** `feat/insta-login` → main  
-**Head:** `7b707e31316f79c85ba97b44a6c8ab3301c2e134`  
-**Scope:** Instagram Login prereq modal, reconnect UX for legacy Facebook-Login tokens, copy updates  
+**Head:** `9a5961fb29cabbf35083487707667ce61ffe3da3`  
+**Scope:** Instagram Login prereq modal, reconnect UX, platform connection eligibility for upload/distribute  
 **Prompt:** `pr-review/prompts/frontend-system-prompt.md`  
-**Paired:** `pr-review/INSTALOGIN/backend.md` (#260), `pr-review/INSTALOGIN/orchestrator.md` (#30)
+**Paired:** `pr-review/INSTALOGIN/backend.md` (#260), `pr-review/INSTALOGIN/orchestrator.md` (#30)  
+**Updated:** 2026-08-07 — re-verify on latest head (findings #1–#3 fixed)
 
 ## GitHub comments
 
-### `src/pages/dashboard/components/ConnectSocialModal.tsx`
-
-- **L164** — OAuth start API errors not caught (no toast)
-
-### `src/pages/user/account/share-account-tab.tsx`
-
-- **L88** — OAuth start API errors not caught (no toast)
+_(none — no Open Critical/High/Medium findings)_
 
 ## Findings
 
@@ -25,18 +20,16 @@ Upload/distribute still treats legacy Instagram as connected
 
 Risk Level: HIGH
 File Path: src/pages/videos/utils/platformConnections.ts
-Lines: 45-63
+Lines: 44-78
 
 Description:
-**Global consistency / DRY.** This PR adds `needsReconnect` UX in account settings and `ConnectSocialModal`, but `getConnectedPlatforms` and `findSocialConnectionForPlatform` still treat any active connection with credentials as connected. Legacy Facebook-Login Instagram tokens (flagged `needsReconnect` by backend #260) remain selectable on **upload** and **distribute** flows (`distribute-eligibility.utils.ts`, `ConnectedPlatformSelector`, `DistributeModal`).
+**Global consistency / DRY.** Added `connectionNeedsReconnect`, `isSocialConnectionPresent`, and `isSocialConnectionUsable`; `getConnectedPlatforms` and `findSocialConnectionForPlatform` now exclude `needsReconnect` connections.
 
 Impact:
-- Users can select Instagram for distribution while holding expired/legacy tokens.
-- Publish jobs fail at orchestrator runtime instead of being blocked in UI with “Reconnect required”.
-- Inconsistent UX vs account/share-account surfaces that already show amber reconnect state.
+- Resolved — upload/distribute flows honor reconnect state via shared helpers.
 
 Recommendation:
-Centralize effective-connection checks, e.g. `isSocialConnectionUsable(c)` returning false when `needsReconnect === true` or `metadata.needsReconnect === true`. Use it in `getConnectedPlatforms`, `findSocialConnectionForPlatform`, and any distribute/upload eligibility helpers. Optionally surface Instagram in upload selector as disabled with reconnect CTA linking to account settings.
+N/A — fixed on head `9a5961fb`.
 ---
 
 ---
@@ -44,17 +37,16 @@ OAuth start API errors not caught in ConnectSocialModal
 
 Risk Level: MEDIUM
 File Path: src/pages/dashboard/components/ConnectSocialModal.tsx
-Lines: 164-186
+Lines: 223-224
 
 Description:
-`startOAuthConnect` wraps `connectMutation.mutateAsync` in `try/finally` without `catch`. Network/API failures throw before the popup opens, leaving the user with no feedback (only `connecting` spinner clearing).
+`startOAuthConnect` now catches API/popup failures and shows `toast.error` via `getApiErrorMessage`.
 
 Impact:
-- Silent failure when `/v1/vendors/connect/...` errors (500, offline, validation).
-- Poor UX compared to popup error handling already present for `result.status === "error"`.
+- Resolved — users get feedback when connect start fails.
 
 Recommendation:
-Add `catch (err) { toast.error(getErrorMessage(err) ?? "Failed to start connection"); }` before `finally`, matching patterns used elsewhere in the app.
+N/A — fixed on head `9a5961fb`.
 ---
 
 ---
@@ -62,26 +54,26 @@ OAuth start API errors not caught in share-account-tab
 
 Risk Level: MEDIUM
 File Path: src/pages/user/account/share-account-tab.tsx
-Lines: 88-110
+Lines: 134-135
 
 Description:
-Same issue as `ConnectSocialModal`: `startOAuthConnect` lacks a `catch` around `connectSocialStart` / popup flow.
+Same `catch` + `toast.error` pattern added to `startOAuthConnect`.
 
 Impact:
-- Silent failures on Instagram reconnect from account settings.
+- Resolved — account-settings reconnect surfaces errors.
 
 Recommendation:
-Add `catch` with `toast.error` before `finally`, consistent with disconnect handlers on the same page.
+N/A — fixed on head `9a5961fb`.
 ---
+
+**Positive notes:** `InstagramConnectPrereqModal`, reconnect UX in `SocialAccountsSection`, and API vendor link polling in connect flows remain coherent.
 
 ## Summary
 
 | # | Title | Risk | Status | File | Lines |
 |---|--------|------|--------|------|-------|
-| 1 | Upload/distribute still treats legacy Instagram as connected | HIGH | Open | src/pages/videos/utils/platformConnections.ts | 45-63 |
-| 2 | OAuth start API errors not caught in ConnectSocialModal | MEDIUM | Open | src/pages/dashboard/components/ConnectSocialModal.tsx | 164-186 |
-| 3 | OAuth start API errors not caught in share-account-tab | MEDIUM | Open | src/pages/user/account/share-account-tab.tsx | 88-110 |
+| 1 | Upload/distribute still treats legacy Instagram as connected | HIGH | ✅ Fixed | src/pages/videos/utils/platformConnections.ts | 44-78 |
+| 2 | OAuth start API errors not caught in ConnectSocialModal | MEDIUM | ✅ Fixed | src/pages/dashboard/components/ConnectSocialModal.tsx | 223-224 |
+| 3 | OAuth start API errors not caught in share-account-tab | MEDIUM | ✅ Fixed | src/pages/user/account/share-account-tab.tsx | 134-135 |
 
-**Merge readiness:** Not merge-ready — wire `needsReconnect` into upload/distribute eligibility before merge; add OAuth start error toasts.
-
-**Summary-only (line not in diff):** Finding #1 — `platformConnections.ts` unchanged in this PR; update that shared helper (or re-export from a new util touched here) so video flows honor reconnect state.
+**Merge readiness:** **Merge-ready** — ship with backend #260 once orchestrator #30 clears `.env.dev` blocker.
